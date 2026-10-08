@@ -1,0 +1,233 @@
+import { activity, ask, dict, free, gap, listen, mcq, order, speak, tr, trap, v } from '../builders';
+import type { Day } from '../schema';
+
+export const words = [
+  v(2, 1, 'how often', 'à quelle fréquence', 'How often do you go to the gym?', 'Tu vas à la salle à quelle fréquence ?', 'Question sur la fréquence. Réponse : every day, twice a week…', '/haʊ ˈɒfn/', ['questions']),
+  v(2, 1, 'how long', 'combien de temps', 'How long does it take to get there?', 'Combien de temps faut-il pour y aller ?', 'Durée. « How long have you lived here? » = depuis combien de temps.', '/haʊ ˈlɒŋ/', ['questions']),
+  v(2, 1, 'how far', 'à quelle distance', 'How far is the station from here?', 'La gare est à quelle distance d’ici ?', 'Distance.', '/haʊ ˈfɑː/', ['questions']),
+  v(2, 1, 'which', 'lequel / quel (choix limité)', 'Which one do you prefer, the red or the blue?', 'Lequel préfères-tu, le rouge ou le bleu ?', 'Choix parmi un nombre limité d’options.', '/wɪtʃ/', ['questions']),
+  v(2, 2, 'whose', 'à qui', 'Whose phone is this?', 'À qui est ce téléphone ?', 'Possession. Ne pas confondre avec « who’s » (= who is).', '/huːz/', ['questions']),
+  v(2, 1, 'usually', 'd’habitude', 'I usually take the bus to work.', 'D’habitude, je prends le bus pour aller au travail.', 'Se place avant le verbe ordinaire.', '/ˈjuːʒuəli/', ['frequency']),
+  v(2, 1, 'still', 'encore, toujours (continuité)', 'Do you still live in Lille?', 'Tu habites toujours à Lille ?', 'Une situation qui continue.', '/stɪl/', ['adverbs']),
+  v(2, 2, 'already', 'déjà', 'I’ve already eaten, thanks.', 'J’ai déjà mangé, merci.', 'Souvent avec le present perfect.', '/ɔːlˈredi/', ['adverbs']),
+  v(2, 2, 'yet', 'déjà (question) / pas encore (négation)', 'Have you finished yet? – Not yet.', 'Tu as déjà fini ? – Pas encore.', 'En fin de phrase, dans les questions et négations.', '/jet/', ['adverbs']),
+  v(2, 1, 'to wonder', 'se demander', 'I wonder why she left early.', 'Je me demande pourquoi elle est partie tôt.', 'Après « I wonder », pas d’inversion : I wonder where he IS.', '/ˈwʌndə/', ['verbs']),
+  v(2, 1, 'to mean', 'vouloir dire, signifier', 'What does this word mean?', 'Que veut dire ce mot ?', 'Question : What does X mean? (pas « What means X? »).', '/miːn/', ['verbs']),
+  v(2, 2, 'nearby', 'à proximité', 'Is there a pharmacy nearby?', 'Il y a une pharmacie à proximité ?', 'Se place souvent en fin de phrase.', '/ˌnɪəˈbaɪ/', ['places']),
+  v(2, 1, 'neighbourhood', 'quartier', 'I love my neighbourhood: it’s quiet and green.', 'J’adore mon quartier : il est calme et vert.', 'Orthographe US : neighborhood.', '/ˈneɪbəhʊd/', ['places']),
+  v(2, 2, 'to be about', 'parler de, traiter de', 'What’s the film about?', 'De quoi parle le film ?', 'Question très fréquente : What is it about?', '/biː əˈbaʊt/', ['questions']),
+  v(2, 1, 'by the way', 'au fait', 'By the way, are you free on Saturday?', 'Au fait, tu es libre samedi ?', 'Pour changer de sujet ou ajouter une info.', '/baɪ ðə ˈweɪ/', ['expressions']),
+];
+
+export const day: Day = {
+  day: 2,
+  title: 'Construire des phrases et poser des questions',
+  titleEn: 'Building sentences',
+  theme: 'Ordre des mots et questions du quotidien',
+  objectives: [
+    'Construire des phrases dans le bon ordre (sujet – verbe – complément)',
+    'Placer correctement adjectifs et adverbes',
+    'Poser toutes les questions courantes avec do/does et be',
+    'Éviter les calques du français (« What means… ? »)',
+  ],
+  concepts: ['word-order', 'questions', 'frequency'],
+  activities: [
+    activity('d02-lesson', {
+      kind: 'lesson',
+      title: 'L’ordre des mots et les questions',
+      summary: 'La structure anglaise est plus rigide que la française : maîtrisez-la une fois pour toutes.',
+      minutes: 15,
+      skills: ['grammar', 'construction'],
+      lesson: [
+        {
+          heading: '1. Sujet – Verbe – Complément (et on ne sépare pas)',
+          body: 'L’ordre de base : SUJET + VERBE + COMPLÉMENT + (manière, lieu, temps).\nOn ne place rien entre le verbe et son complément d’objet.',
+          examples: [
+            { en: 'I speak English quite well.', fr: 'Je parle assez bien anglais.', note: 'Pas « I speak quite well English ».' },
+            { en: 'She drinks coffee every morning.', fr: 'Elle boit du café chaque matin.' },
+          ],
+        },
+        {
+          heading: '2. L’adjectif se place AVANT le nom',
+          body: 'Un adjectif ne prend jamais de « s » : two big houses.\nOrdre habituel si plusieurs adjectifs : opinion – taille – âge – couleur – origine : a lovely little old red French car.',
+          examples: [
+            { en: 'a nice quiet neighbourhood', fr: 'un quartier calme et agréable' },
+            { en: 'two expensive cars', fr: 'deux voitures chères' },
+          ],
+        },
+        {
+          heading: '3. Questions avec un verbe ordinaire : do / does',
+          body: '(Mot interrogatif) + DO / DOES + sujet + verbe de BASE.\n« does » pour he/she/it, et le verbe perd son -s.',
+          examples: [
+            { en: 'Where do you work?', fr: 'Où travailles-tu ?' },
+            { en: 'What does she do?', fr: 'Que fait-elle (comme métier) ?' },
+            { en: 'What does this word mean?', fr: 'Que veut dire ce mot ?', note: 'Jamais « What means this word? »' },
+          ],
+        },
+        {
+          heading: '4. Questions avec be, can, will, have got : inversion',
+          body: 'Is he at home? – Can you help me? – Will you be there?\nQuestions sur le SUJET (qui ? quoi ?) : pas de do. « Who lives here? », « What happened? »',
+          examples: [
+            { en: 'Who wants a coffee?', fr: 'Qui veut un café ?' },
+            { en: 'What happened?', fr: 'Que s’est-il passé ?' },
+          ],
+          tip: 'Questions indirectes (« Do you know where… ») : pas d’inversion. « Do you know where the station IS? »',
+        },
+      ],
+      items: [
+        mcq('word-order', 1, 'Choose the correct sentence:', ['I like very much chocolate.', 'I like chocolate very much.', 'I very much chocolate like.', 'Very much I like chocolate.'], 1, 'Ne séparez pas le verbe de son complément.'),
+        mcq('questions', 1, 'Que veut dire « wonder » ?', ['What means “wonder”?', 'What does “wonder” mean?', 'What “wonder” means?', 'What is mean “wonder”?'], 1, 'What does X mean?'),
+        mcq('word-order', 2, 'Choose the correct sentence:', ['She has a car red.', 'She has a red car.', 'She has a reds car.', 'She has red a car.'], 1, 'L’adjectif se place avant le nom et reste invariable.'),
+        mcq('questions', 2, 'Do you know where ___?', ['is the station', 'the station is', 'does the station', 'the station does'], 1, 'Question indirecte : pas d’inversion.'),
+      ],
+    }),
+    activity('d02-vocab', {
+      kind: 'vocabulary',
+      title: 'Vocabulaire : questions et précisions',
+      summary: 'Mots interrogatifs et adverbes indispensables.',
+      minutes: 15,
+      skills: ['vocabulary'],
+      words: words.map((w) => w.id),
+      items: [],
+    }),
+    activity('d02-grammar', {
+      kind: 'grammar',
+      title: 'Pratique : ordre des mots et questions',
+      summary: 'Construisez des questions correctes.',
+      minutes: 18,
+      skills: ['grammar', 'construction'],
+      items: [
+        gap('questions', 1, 'Where ___ you live?', ['do'], 'Verbe ordinaire, sujet « you » → do.'),
+        gap('questions', 1, 'What time ___ she start work?', ['does'], 'she → does (et le verbe reste « start »).', {
+          traps: [trap('do', 'grammar', 'Avec he/she/it, on utilise « does ».')],
+        }),
+        gap('questions', 1, '___ you tired?', ['Are'], 'Avec un adjectif (tired), c’est le verbe « be » : Are you tired?', {
+          traps: [trap('do', 'grammar', '« tired » est un adjectif : la question se construit avec « be » → Are you tired?')],
+        }),
+        gap('questions', 2, 'How long ___ it take to get to work?', ['does'], 'it → does : How long does it take…?'),
+        gap('questions', 2, '___ bag is this? – It’s mine.', ['Whose'], '« À qui » = whose.', { traps: [trap("who's", 'vocabulary', '« who’s » = who is. Pour la possession : whose.')] }),
+        gap('questions', 2, 'Who ___ the keys? I can’t find them.', ['has', 'has got'], 'Question sur le sujet (who) : pas de « do ». Who has the keys?', {
+          traps: [trap('does have', 'grammar', 'Quand « who » est le sujet, pas d’auxiliaire do/does : Who has…?')],
+        }),
+        order('word-order', 1, 'She speaks English very well', 'Elle parle très bien anglais.', 'Verbe + complément + adverbe de manière.'),
+        order('frequency', 2, 'I usually have breakfast at seven', 'Je prends généralement le petit-déjeuner à sept heures.', 'L’adverbe de fréquence se place avant le verbe.'),
+        order('questions', 2, 'Do you know where the bank is?', 'Sais-tu où est la banque ?', 'Question indirecte : sujet + verbe à la fin.'),
+        order('questions', 3, 'How often does your sister call you?', 'À quelle fréquence ta sœur t’appelle-t-elle ?', 'How often + does + sujet + verbe de base.'),
+      ],
+    }),
+    activity('d02-dialogue', {
+      kind: 'dialogue',
+      title: 'Dialogue : le nouveau collègue',
+      summary: 'Une conversation pleine de questions entre deux collègues.',
+      minutes: 12,
+      skills: ['listening', 'reading'],
+      dialogue: {
+        title: 'The new colleague',
+        setting: 'Nadia accueille Tom, un collègue anglais qui vient d’arriver dans son équipe.',
+        lines: [
+          { speaker: 'Nadia', text: 'So, Tom, how do you like Paris so far?', fr: 'Alors Tom, comment trouves-tu Paris jusqu’ici ?' },
+          { speaker: 'Tom', text: 'I love it! But I’m still looking for a flat.', fr: 'J’adore ! Mais je cherche toujours un appartement.' },
+          { speaker: 'Nadia', text: 'Which neighbourhood are you interested in?', fr: 'Quel quartier t’intéresse ?' },
+          { speaker: 'Tom', text: 'Somewhere quiet, not too far from the office. How far is the eleventh district from here?', fr: 'Un endroit calme, pas trop loin du bureau. À quelle distance est le 11e arrondissement d’ici ?' },
+          { speaker: 'Nadia', text: 'About twenty minutes by metro. I live there, actually. There’s a great market nearby.', fr: 'Environ vingt minutes en métro. J’y habite, en fait. Il y a un super marché à proximité.' },
+          { speaker: 'Tom', text: 'Perfect. How often do you work from home?', fr: 'Parfait. Tu télétravailles à quelle fréquence ?' },
+          { speaker: 'Nadia', text: 'Usually twice a week, on Mondays and Fridays. By the way, do you know where the meeting room is?', fr: 'D’habitude deux fois par semaine, le lundi et le vendredi. Au fait, tu sais où est la salle de réunion ?' },
+          { speaker: 'Tom', text: 'No, I don’t. And what is the meeting about?', fr: 'Non. Et la réunion porte sur quoi ?' },
+          { speaker: 'Nadia', text: 'The new project. Come on, I’ll show you.', fr: 'Le nouveau projet. Viens, je te montre.' },
+        ],
+      },
+      items: [
+        mcq('comprehension', 1, 'What is Tom still looking for?', ['A job', 'A flat', 'A market', 'A colleague'], 1, '« I’m still looking for a flat ».', { skill: 'reading', passage: true }),
+        mcq('comprehension', 1, 'How long does it take to get to the eleventh district?', ['About 10 minutes', 'About 20 minutes', 'About an hour', 'Two hours'], 1, '« About twenty minutes by metro ».', { skill: 'reading', passage: true }),
+        mcq('comprehension', 2, 'How often does Nadia work from home?', ['Every day', 'Never', 'Twice a week', 'Once a month'], 2, '« Usually twice a week ».', { skill: 'reading', passage: true }),
+        mcq('comprehension', 2, 'What is the meeting about?', ['A new flat', 'The new project', 'The market', 'Working from home'], 1, '« The new project ».', { skill: 'reading', passage: true }),
+        mcq('vocabulary', 2, 'In the dialogue, « so far » means…', ['très loin', 'jusqu’ici / pour l’instant', 'si loin', 'alors'], 1, '« How do you like Paris so far? » = jusqu’à présent.', { skill: 'vocabulary', passage: true }),
+      ],
+    }),
+    activity('d02-listening', {
+      kind: 'listening',
+      title: 'Écoute : quelle est la question ?',
+      summary: 'Écoutez et identifiez la bonne réponse ou la bonne question.',
+      minutes: 10,
+      skills: ['listening'],
+      items: [
+        listen('questions', 1, 'How often do you go to the cinema?', 'What is the best answer?', ['Yes, I do.', 'About once a month.', 'For two hours.', 'At the cinema.'], 1, '« How often » demande une fréquence.'),
+        listen('questions', 1, 'How far is the airport?', 'What is the best answer?', ['It’s about 30 kilometres away.', 'At 6 pm.', 'Twice a week.', 'It’s mine.'], 0, '« How far » demande une distance.'),
+        listen('questions', 2, 'Whose jacket is this?', 'What is the best answer?', ['It’s Paul’s.', 'It’s blue.', 'It’s in the car.', 'Yes, it is.'], 0, '« Whose » = à qui → It’s Paul’s.'),
+        listen('questions', 2, 'What’s the book about?', 'What is the best answer?', ['It’s 300 pages long.', 'It’s about a family in Ireland.', 'It’s on the table.', 'About ten euros.'], 1, '« What is it about? » = de quoi ça parle ?'),
+        dict('questions', 1, 'What does she do?', 'What does she do? = Que fait-elle (métier) ?'),
+        dict('questions', 2, 'Do you still live near here?', '« still » = toujours (continuité).'),
+      ],
+    }),
+    activity('d02-translation', {
+      kind: 'translation',
+      title: 'Traduire sans calquer le français',
+      summary: 'Les pièges classiques des questions.',
+      minutes: 12,
+      skills: ['construction'],
+      items: [
+        tr('questions', 1, 'Où travaille ton frère ?', ['Where does your brother work'], 'Where + does + sujet + verbe de base.', {
+          traps: [trap('where works your brother', 'grammar', 'Pas d’inversion verbe-sujet avec un verbe ordinaire : Where DOES your brother WORK?')],
+        }),
+        tr('questions', 1, 'Que veut dire ce mot ?', ['What does this word mean'], 'What does X mean?', {
+          traps: [trap('what means this word', 'grammar', 'Calque du français. Il faut l’auxiliaire : What does this word mean?')],
+        }),
+        tr('questions', 2, 'De quoi parle le film ?', ["What{'s| is} the {film|movie} about"], 'What is it about? = de quoi ça parle ?'),
+        tr('word-order', 2, 'J’aime beaucoup ce quartier.', ['I {really like|love} this {neighborhood|area}', 'I like this {neighborhood|area} {a lot|very much}'], 'I really like… / I like … a lot.'),
+        tr('questions', 2, 'Sais-tu où est la gare ?', ['Do you know where the {station|train station} is'], 'Question indirecte : … where the station IS.'),
+        tr('questions', 3, 'Combien de temps faut-il pour aller à Londres ?', ['How long does it take to {get|go} to London'], 'How long does it take to + verbe.'),
+      ],
+    }),
+    activity('d02-speaking', {
+      kind: 'speaking',
+      title: 'Oral : poser des questions avec fluidité',
+      summary: 'Répétez les questions jusqu’à ce qu’elles sortent sans effort.',
+      minutes: 12,
+      skills: ['speaking'],
+      items: [
+        speak('pronunciation', 1, 'Where do you live?', 'Où habites-tu ?', 'À l’oral, « do you » se prononce souvent « d’you ».'),
+        speak('pronunciation', 1, 'What does it mean?', 'Qu’est-ce que ça veut dire ?', '« does it » se lie : « duz-it ».'),
+        speak('pronunciation', 2, 'How often do you go there?', 'Tu y vas à quelle fréquence ?', 'Intonation descendante sur les questions en wh-.'),
+        speak('pronunciation', 2, 'Do you know where the nearest pharmacy is?', 'Savez-vous où est la pharmacie la plus proche ?', 'Le « h » de pharmacy = « f ». Accent sur « PHAR ».'),
+        ask('questions', 2, 'How often do you speak English?', 'I speak English about twice a week, mostly at work.', 'À quelle fréquence parles-tu anglais ?', ['every', 'week', 'day', 'never', 'sometimes', 'often', 'rarely', 'once', 'twice', 'month'], 'Donnez une fréquence : every day, twice a week, rarely…'),
+        ask('questions', 2, 'What is your neighbourhood like?', 'My neighbourhood is quiet and green, with a lot of small shops.', 'Comment est ton quartier ?', ['quiet', 'noisy', 'nice', 'big', 'small', 'neighborhood', 'it is', 'there'], '« What is it like? » demande une description.'),
+      ],
+    }),
+    activity('d02-writing', {
+      kind: 'writing',
+      title: 'Écriture : 8 questions pour faire connaissance',
+      summary: 'Écrivez des questions variées pour un nouveau contact.',
+      minutes: 12,
+      skills: ['writing', 'construction'],
+      items: [
+        free('questions', 2, {
+          prompt: 'You meet a new colleague from Australia. Write 8 different questions to get to know them (use how often, how long, which, what… about, where).',
+          promptFr: 'Vous rencontrez un collègue australien. Écrivez 8 questions différentes pour faire connaissance.',
+          minWords: 40,
+          targetWords: ['how often', 'how long', 'which', 'about'],
+          keywords: ['?'],
+          modelAnswer:
+            'Where are you from in Australia? How long have you been in France? Which city do you prefer, Paris or Sydney? What do you do in your free time? How often do you go back home? What is your project about? Do you know a good restaurant nearby? What do you miss the most?',
+          checklist: ['Chaque question a un auxiliaire (do/does/are/is…)', 'Pas de « What means… »', 'J’ai varié les mots interrogatifs', 'J’ai mis un point d’interrogation'],
+        }),
+      ],
+    }),
+    activity('d02-test', {
+      kind: 'test',
+      title: 'Test de validation du jour 2',
+      summary: 'Ordre des mots et questions.',
+      minutes: 8,
+      skills: ['grammar', 'construction', 'vocabulary'],
+      items: [
+        gap('questions', 1, 'What ___ your parents do?', ['do'], 'parents = they → do.'),
+        gap('questions', 2, 'How often ___ he play tennis?', ['does'], 'he → does.'),
+        mcq('word-order', 2, 'Choose the correct sentence:', ['I read every evening a book.', 'I read a book every evening.', 'Every evening I a book read.', 'I every evening read a book.'], 1, 'Verbe + complément, puis le temps.'),
+        mcq('questions', 2, 'Can you tell me ___?', ['where is the toilet', 'where the toilet is', 'where does the toilet', 'the toilet where is'], 1, 'Question indirecte : pas d’inversion.'),
+        mcq('vocabulary', 1, '« Have you finished yet? – Not ___. »', ['already', 'still', 'yet', 'by'], 2, '« Not yet » = pas encore.', { skill: 'vocabulary' }),
+        tr('questions', 2, 'À qui est cette voiture ?', ['Whose car is this', 'Whose car is that', 'Whose is this car'], 'Whose + nom + is this?'),
+        order('questions', 2, 'What is your favourite film about?', 'De quoi parle ton film préféré ?', 'What + is + sujet + about?', { alternatives: ['What is your favorite film about?'] }),
+        listen('questions', 2, 'Which one do you want, the big one or the small one?', 'What is the person asking?', ['The price', 'A choice between two things', 'The time', 'A direction'], 1, '« Which one » = lequel (choix limité).'),
+      ],
+    }),
+  ],
+};
