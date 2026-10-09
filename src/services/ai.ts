@@ -34,13 +34,17 @@ export async function checkAi(force = false): Promise<AiStatus> {
   else if (typeof navigator !== 'undefined' && !navigator.onLine) status = { available: false, reason: 'Hors ligne : le professeur IA nécessite Internet.' };
   else {
     try {
-      const res = await fetch(endpoint, { method: 'GET', headers: await authHeaders() });
+      const headers = await authHeaders();
+      const needsLogin = supabaseConfigured() && endpoint.startsWith(config.supabaseUrl) && !headers.Authorization;
+      const res = await fetch(endpoint, { method: 'GET', headers });
       if (res.status === 401) status = { available: false, reason: 'Connectez-vous à votre compte pour utiliser le professeur IA.' };
       else if (!res.ok) status = { available: false, reason: `Professeur IA indisponible (${res.status}).` };
       else {
         const body = (await res.json()) as { configured?: boolean };
         status = body.configured
-          ? { available: true, reason: 'Professeur IA connecté.' }
+          ? needsLogin
+            ? { available: false, reason: 'Un professeur IA est disponible : connectez-vous (Paramètres › Compte) pour l’utiliser.' }
+            : { available: true, reason: 'Professeur IA connecté.' }
           : { available: false, reason: 'Le serveur fonctionne mais aucune clé de modèle n’est configurée (voir README).' };
       }
     } catch {

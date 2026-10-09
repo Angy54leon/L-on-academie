@@ -464,7 +464,9 @@ function objectPronoun(p: string): string {
 }
 
 /** Analyse un texte anglais et renvoie les problèmes détectés (sans doublons). */
-export function detectIssues(text: string): GrammarIssue[] {
+export function detectIssues(rawText: string): GrammarIssue[] {
+  // Les claviers de téléphone produisent des apostrophes typographiques (’) : on les uniformise.
+  const text = rawText.replace(/[’‘`´]/g, "'");
   const issues: GrammarIssue[] = [];
   const seen = new Set<string>();
   for (const rule of RULES) {

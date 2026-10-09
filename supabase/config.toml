@@ -1,0 +1,8 @@
+# Configuration minimale pour la CLI Supabase (facultatif).
+project_id = "leon-academie"
+
+[functions.teacher]
+verify_jwt = false # le jeton est vérifié dans la fonction (permet aussi la requête GET de statut)
+
+[functions.delete-account]
+verify_jwt = true

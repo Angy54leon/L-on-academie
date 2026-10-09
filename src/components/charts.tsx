@@ -109,7 +109,7 @@ export function VBarChart({ data, unit = '', height = 180, color = 'var(--series
           })}
         </svg>
         {hover !== null && (
-          <div className="chart-tooltip" style={{ left: `${((pad.l + hover * bw + bw / 2) / W) * 100}%`, top: `${(y(data[hover].value) / H) * 100}%` }}>
+          <div className="chart-tooltip" style={{ left: `${Math.min(80, Math.max(20, ((pad.l + hover * bw + bw / 2) / W) * 100))}%`, top: `${(y(data[hover].value) / H) * 100}%` }}>
             <strong>{data[hover].title ?? data[hover].label}</strong> · {data[hover].value} {unit}
           </div>
         )}

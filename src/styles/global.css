@@ -1564,3 +1564,14 @@ table.data td.num {
     max-width: none;
   }
 }
+
+@media (max-width: 600px) {
+  .dialogue-line {
+    flex-direction: column;
+    gap: 4px;
+  }
+  .dialogue-line .who {
+    width: auto;
+    padding-top: 0;
+  }
+}
