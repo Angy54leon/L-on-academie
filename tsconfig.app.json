@@ -19,5 +19,5 @@
     "noFallthroughCasesInSwitch": true,
     "types": ["vite/client"]
   },
-  "include": ["src", "tests"]
+  "include": ["src", "tests", "supabase/functions/_shared/teacher-core.ts"]
 }

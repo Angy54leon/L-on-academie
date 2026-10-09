@@ -176,6 +176,6 @@ export function isDynamicActivity(a: Activity): boolean {
 }
 
 export { ASSESSMENT_FORMS } from './assessments';
-export { SCENARIOS, getScenario } from './scenarios';
+export { SCENARIOS, getScenario, type Scenario, type ScenarioStep } from './scenarios';
 export { CONCEPTS, getConcept, conceptLabel } from './concepts';
 export * from './schema';

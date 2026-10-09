@@ -1,4 +1,4 @@
-import { activity, ask, conj, dict, free, gap, listen, mcq, order, speak, tr, trap, v } from '../builders';
+import { activity, ask, conj, free, gap, listen, mcq, speak, tr, trap, v } from '../builders';
 import type { Day } from '../schema';
 
 export const words = [
