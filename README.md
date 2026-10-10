@@ -180,8 +180,8 @@ Supabase fournit l’authentification (e-mail + mot de passe) et la base de donn
 ### Étapes (tableau de bord Supabase)
 
 1. Créez un compte sur <https://supabase.com> puis un **nouveau projet**.
-2. **SQL Editor** → « New query » → collez le contenu de `supabase/migrations/20261009000000_init.sql` → **Run**.
-3. Nouvelle requête → collez `supabase/migrations/20261010000000_autosave.sql` → **Run** (à exécuter **après** le premier ; il peut être relancé sans risque).
+2. **Créer les tables et la sécurité — méthode sans copier-coller (recommandée)** : **Project Settings → Integrations → GitHub** → autorisez GitHub, choisissez ce dépôt, laissez le dossier Supabase par défaut, activez **Deploy to production** avec la branche de production du dépôt. À chaque envoi sur cette branche, Supabase applique automatiquement les fichiers de `supabase/migrations` qui ne l’ont pas encore été (et déploie les fonctions déclarées dans `supabase/config.toml`).
+3. **Méthode manuelle (alternative)** : **SQL Editor** → « New query » → collez `supabase/migrations/20261009000000_init.sql` → **Run**, puis faites de même avec `supabase/migrations/20261010000000_autosave.sql`. Les deux fichiers peuvent être ré-exécutés sans risque.
 4. **Project Settings → API Keys** : copiez l’**URL du projet** et la clé **publique** (« publishable », qui commence par `sb_publishable_…`, ou l’ancienne clé « anon »). **Ne copiez jamais** la clé `service_role` / « secret ».
 5. **Authentication → URL Configuration** :
    - **Site URL** : l’adresse de votre site, par exemple `https://votre-app.vercel.app/` ;
@@ -208,6 +208,8 @@ Supabase fournit l’authentification (e-mail + mot de passe) et la base de donn
 
 En local : mettez-les dans `.env` (ignoré par Git). Sur Vercel : voir §7.
 
+Les noms créés automatiquement par l’intégration Supabase ↔ Vercel sont aussi acceptés : `NEXT_PUBLIC_SUPABASE_URL` et `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` ou `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Seules l’URL et la clé publique sont utilisées ; si une clé secrète est fournie par erreur, la compilation s’arrête avec un message explicite.
+
 ### Limites à connaître
 
 - Les liens reçus par e-mail (confirmation, réinitialisation) doivent être ouverts **dans le navigateur où la demande a été faite** (sécurité PKCE). Ouverts ailleurs, l’adresse est quand même confirmée : il suffit de se connecter.
@@ -222,7 +224,7 @@ L’application est un site statique : après `npm run build`, il suffit d’hé
 
 ### Vercel (déploiement relié à GitHub)
 
-1. Vercel → votre projet → **Settings → Environment Variables** : ajoutez `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` et, si vous voulez, `VITE_APP_URL` (cochez au moins *Production*, et *Preview* si vous testez les branches).
+1. **Le plus simple** : reliez Supabase à Vercel par l’intégration officielle (Supabase : **Project Settings → Integrations → Vercel**, ou Vercel : onglet **Storage** / Marketplace « Supabase »). Les variables sont ajoutées automatiquement, rien à recopier. **Sinon**, Vercel → votre projet → **Settings → Environment Variables** : ajoutez `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` et, si vous voulez, `VITE_APP_URL` (cochez au moins *Production*, et *Preview* si vous testez les branches).
 2. **Deployments** → dernier déploiement → **⋯ → Redeploy** (indispensable : les variables ne sont prises en compte qu’au build).
 3. Vérifiez que l’adresse Vercel figure dans **Site URL** et **Redirect URLs** de Supabase (§6, étape 5). Pour les déploiements de prévisualisation, ajoutez aussi leur adresse (par exemple `https://*-votre-compte.vercel.app/**`).
 4. Testez : créez un compte, confirmez l’e-mail, faites un exercice, puis connectez-vous depuis un autre appareil.

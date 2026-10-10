@@ -89,8 +89,46 @@ function precacheManifest(): Plugin {
   };
 }
 
+/**
+ * Configuration Supabase publique. En plus de VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY, on accepte les noms
+ * créés automatiquement par l'intégration Supabase ↔ Vercel (NEXT_PUBLIC_SUPABASE_URL, …), pour ne rien avoir
+ * à recopier. Seules l'URL et la clé PUBLIQUE sont reprises ; une clé secrète bloque la compilation.
+ */
+function resolvePublicSupabaseEnv(env: Record<string, string>) {
+  const pick = (...names: string[]) => names.map((n) => env[n]?.trim()).find(Boolean) ?? '';
+  const url = pick('VITE_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_URL');
+  const key = pick(
+    'VITE_SUPABASE_ANON_KEY',
+    'VITE_SUPABASE_PUBLISHABLE_KEY',
+    'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
+    'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+    'SUPABASE_PUBLISHABLE_KEY',
+    'SUPABASE_ANON_KEY',
+  );
+  if (isSecretKey(key)) {
+    throw new Error(
+      'LÉON ACADÉMIE : la clé Supabase fournie est une clé SECRÈTE (service_role / sb_secret_). ' +
+        'Elle ne doit jamais être envoyée au navigateur : utilisez la clé publique « publishable » (sb_publishable_…) ou « anon ».',
+    );
+  }
+  if (url) process.env.VITE_SUPABASE_URL = url;
+  if (key) process.env.VITE_SUPABASE_ANON_KEY = key;
+}
+
+function isSecretKey(key: string): boolean {
+  if (key.startsWith('sb_secret_')) return true;
+  const payload = key.split('.')[1];
+  if (!payload) return false;
+  try {
+    return JSON.parse(Buffer.from(payload, 'base64url').toString()).role === 'service_role';
+  } catch {
+    return false;
+  }
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
+  resolvePublicSupabaseEnv(env);
   return {
     base: './',
     plugins: [react(), devTeacherApi(env), precacheManifest()],
