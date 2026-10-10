@@ -2,6 +2,7 @@
 -- LÉON ACADÉMIE — schéma Supabase (facultatif)
 -- Comptes, sauvegarde de la progression, espace social, quotas IA.
 -- Sécurité : Row Level Security (RLS) activée sur TOUTES les tables.
+-- Peut être ré-exécuté sans risque (tables, politiques et fonctions recréées à l'identique).
 -- Un utilisateur ne peut lire/écrire que ses propres données ; les membres
 -- d'un groupe ne voient que les statistiques que chacun choisit de partager.
 -- =====================================================================
@@ -95,29 +96,42 @@ as $$
 $$;
 
 -- Profils : chacun ne voit et ne modifie que le sien.
+drop policy if exists "profil : lecture du sien" on public.profiles;
 create policy "profil : lecture du sien" on public.profiles for select using (id = auth.uid());
+drop policy if exists "profil : modification du sien" on public.profiles;
 create policy "profil : modification du sien" on public.profiles for update using (id = auth.uid()) with check (id = auth.uid());
 
 -- Progression : strictement personnelle.
+drop policy if exists "progression : lecture" on public.learner_states;
 create policy "progression : lecture" on public.learner_states for select using (user_id = auth.uid());
+drop policy if exists "progression : création" on public.learner_states;
 create policy "progression : création" on public.learner_states for insert with check (user_id = auth.uid());
+drop policy if exists "progression : mise à jour" on public.learner_states;
 create policy "progression : mise à jour" on public.learner_states for update using (user_id = auth.uid()) with check (user_id = auth.uid());
+drop policy if exists "progression : suppression" on public.learner_states;
 create policy "progression : suppression" on public.learner_states for delete using (user_id = auth.uid());
 
 -- Statistiques publiques : lecture directe de SA ligne uniquement.
 -- Les autres membres passent par get_group_leaderboard (qui masque ce qui n'est pas partagé).
+drop policy if exists "stats : lecture des siennes" on public.public_stats;
 create policy "stats : lecture des siennes" on public.public_stats for select using (user_id = auth.uid());
 
 -- Groupes : visibles par leurs membres ; supprimables par leur propriétaire.
+drop policy if exists "groupes : lecture membres" on public.groups;
 create policy "groupes : lecture membres" on public.groups for select using (public.is_group_member(id));
+drop policy if exists "groupes : suppression propriétaire" on public.groups;
 create policy "groupes : suppression propriétaire" on public.groups for delete using (owner_id = auth.uid());
 
 -- Membres : visibles par les membres du même groupe.
+drop policy if exists "membres : lecture" on public.group_members;
 create policy "membres : lecture" on public.group_members for select using (public.is_group_member(group_id));
 
 -- Défis de groupe.
+drop policy if exists "défis : lecture membres" on public.group_challenges;
 create policy "défis : lecture membres" on public.group_challenges for select using (public.is_group_member(group_id));
+drop policy if exists "défis : création membres" on public.group_challenges;
 create policy "défis : création membres" on public.group_challenges for insert with check (public.is_group_member(group_id) and created_by = auth.uid());
+drop policy if exists "défis : suppression auteur" on public.group_challenges;
 create policy "défis : suppression auteur" on public.group_challenges for delete using (created_by = auth.uid());
 
 -- ai_usage : aucune politique => aucun accès direct depuis le client.
@@ -199,7 +213,9 @@ $$;
 
 -- Les statistiques publiques ne sont écrites que par push_state : on autorise l'écriture
 -- de SA ligne pour cette fonction (exécutée avec les droits de l'utilisateur).
+drop policy if exists "stats : écriture des siennes" on public.public_stats;
 create policy "stats : écriture des siennes" on public.public_stats for insert with check (user_id = auth.uid());
+drop policy if exists "stats : mise à jour des siennes" on public.public_stats;
 create policy "stats : mise à jour des siennes" on public.public_stats for update using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 -- ---------------------------------------------------------------- Groupes : création, adhésion, départ

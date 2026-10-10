@@ -40,10 +40,11 @@ beforeAll(async () => {
     grant usage on schema auth to authenticated, anon;
     grant execute on function auth.uid() to authenticated, anon;
   `);
-  await db.exec(readFileSync('supabase/migrations/20261009000000_init.sql', 'utf8'));
-  await db.exec(readFileSync('supabase/migrations/20261010000000_autosave.sql', 'utf8'));
-  // La seconde migration peut être ré-exécutée sans risque.
-  await db.exec(readFileSync('supabase/migrations/20261010000000_autosave.sql', 'utf8'));
+  // Les deux migrations, dans l'ordre, puis une seconde fois : elles doivent pouvoir être ré-exécutées sans erreur.
+  for (let i = 0; i < 2; i++) {
+    await db.exec(readFileSync('supabase/migrations/20261009000000_init.sql', 'utf8'));
+    await db.exec(readFileSync('supabase/migrations/20261010000000_autosave.sql', 'utf8'));
+  }
   await db.exec(`insert into auth.users (id, raw_user_meta_data) values ('${A}', '{"display_name":"Alice"}'), ('${B}', '{"display_name":"Bob"}'), ('${C}', '{}');`);
 }, 60_000);
 
