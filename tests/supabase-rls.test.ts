@@ -39,6 +39,10 @@ beforeAll(async () => {
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
     grant usage on schema auth to authenticated, anon;
     grant execute on function auth.uid() to authenticated, anon;
+    -- Comme sur un vrai projet Supabase : tous les droits sont accordés par défaut aux nouveaux objets du schéma public.
+    alter default privileges in schema public grant all on tables to anon, authenticated;
+    alter default privileges in schema public grant all on functions to anon, authenticated;
+    alter default privileges in schema public grant all on sequences to anon, authenticated;
   `);
   // Les deux migrations, dans l'ordre, puis une seconde fois : elles doivent pouvoir être ré-exécutées sans erreur.
   for (let i = 0; i < 2; i++) {
@@ -138,6 +142,50 @@ describe('schéma Supabase et sécurité RLS', () => {
     expect(rows.find((r) => r.is_me)?.display_name).toBe('Bob');
     expect(await fails(C, `insert into public.group_challenges (group_id, title, metric, target, ends_at) values ('${g.id}', 'X', 'xp_week', 5, now())`)).toBe(true);
     expect(await as(B, `insert into public.group_challenges (group_id, title, metric, target, ends_at) values ('${g.id}', 'Défi', 'xp_week', 500, now() + interval '7 days') returning id`)).toHaveLength(1);
+  });
+
+  it('les fonctions SECURITY DEFINER ne donnent accès à aucune donnée d’un autre utilisateur', async () => {
+    const snapshot = async () =>
+      (
+        await db.query<{ s: string }>(
+          `select concat_ws('#',
+             (select string_agg(user_id || ':' || revision || ':' || state::text, '|' order by user_id) from public.learner_states),
+             (select string_agg(user_id || ':' || xp_total, '|' order by user_id) from public.public_stats),
+             (select string_agg(g.id || ':' || g.owner_id, '|' order by g.id) from public.groups g),
+             (select string_agg(group_id || ':' || user_id, '|' order by group_id, user_id) from public.group_members),
+             (select string_agg(user_id || ':' || count, '|' order by user_id) from public.ai_usage where user_id <> '${C}')) as s`,
+        )
+      ).rows[0].s;
+    const before = await snapshot();
+    const [{ id: gid }] = (await db.query<{ id: string }>(`select id from public.groups where name = 'Les anglophiles'`)).rows;
+    // C n'est pas membre : quitter le groupe des autres ou demander la suppression de « ses » données ne touche à rien d'autre.
+    await as(C, `select public.leave_group('${gid}')`);
+    await as(C, `select public.delete_my_data()`);
+    await as(C, `select public.consume_ai_quota(1000)`);
+    // B est membre mais pas propriétaire : il ne peut pas supprimer le groupe.
+    await as(B, `delete from public.groups where id = '${gid}'`);
+    expect(await snapshot()).toBe(before);
+    await db.exec(`delete from public.ai_usage where user_id = '${C}'`); // remise à zéro pour le test du quota
+    // Fonction réservée au déclencheur d'inscription : non appelable par les utilisateurs.
+    expect(await fails(C, 'select public.handle_new_user()')).toBe(true);
+    const callable = await db.query<{ proname: string; anon: boolean; auth: boolean }>(
+      `select proname, has_function_privilege('anon', p.oid, 'execute') as anon, has_function_privilege('authenticated', p.oid, 'execute') as auth
+         from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' order by proname`,
+    );
+    expect(callable.rows.filter((r) => r.anon)).toEqual([]);
+    expect(callable.rows.find((r) => r.proname === 'handle_new_user')?.auth).toBe(false);
+    // Pas de droits dangereux hors RLS (TRUNCATE contourne les règles RLS).
+    const risky = await db.query(
+      `select c.relname, priv from pg_class c join pg_namespace n on n.oid = c.relnamespace, unnest(array['TRUNCATE','REFERENCES','TRIGGER']) priv
+        where n.nspname = 'public' and c.relkind = 'r' and has_table_privilege('authenticated', c.oid, priv)`,
+    );
+    expect(risky.rows).toEqual([]);
+    // Toutes les fonctions SECURITY DEFINER fixent leur chemin de recherche.
+    const unsafe = await db.query(
+      `select proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.prosecdef and not coalesce('search_path=public, pg_temp' = any (p.proconfig), false)`,
+    );
+    expect(unsafe.rows).toEqual([]);
   });
 
   it('applique le quota IA quotidien', async () => {

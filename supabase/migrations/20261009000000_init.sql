@@ -89,7 +89,7 @@ create or replace function public.is_group_member(gid uuid)
 returns boolean
 language sql
 security definer
-set search_path = public
+set search_path = public, pg_temp
 stable
 as $$
   select exists (select 1 from public.group_members where group_id = gid and user_id = auth.uid());
@@ -141,7 +141,7 @@ create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, pg_temp
 as $$
 begin
   insert into public.profiles (id, display_name)
@@ -161,7 +161,7 @@ create or replace function public.push_state(expected_revision integer, new_stat
 returns integer
 language plpgsql
 security invoker
-set search_path = public
+set search_path = public, pg_temp
 as $$
 declare
   uid uuid := auth.uid();
@@ -223,7 +223,7 @@ create or replace function public.create_group(group_name text)
 returns public.groups
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, pg_temp
 as $$
 declare
   g public.groups;
@@ -252,7 +252,7 @@ create or replace function public.join_group(code text)
 returns public.groups
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, pg_temp
 as $$
 declare
   g public.groups;
@@ -272,7 +272,7 @@ create or replace function public.leave_group(gid uuid)
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, pg_temp
 as $$
 begin
   delete from public.group_members where group_id = gid and user_id = auth.uid();
@@ -289,7 +289,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, pg_temp
 stable
 as $$
 begin
@@ -318,7 +318,7 @@ create or replace function public.delete_my_data()
 returns void
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, pg_temp
 as $$
 declare
   uid uuid := auth.uid();
@@ -338,7 +338,7 @@ create or replace function public.consume_ai_quota(daily_limit integer)
 returns boolean
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, pg_temp
 as $$
 declare
   uid uuid := auth.uid();
@@ -353,8 +353,14 @@ end;
 $$;
 
 -- ---------------------------------------------------------------- Droits (explicites, requis sur les projets récents)
-revoke all on all tables in schema public from anon;
-revoke all on all functions in schema public from anon, public;
+-- Principe du moindre privilège : Supabase accorde par défaut TOUS les droits sur les nouvelles tables et
+-- fonctions aux rôles anon et authenticated. On les retire, puis on n'accorde que le strict nécessaire.
+-- (Les règles RLS ci-dessus restent la protection principale ; ceci est une seconde barrière.)
+revoke all on table public.profiles, public.learner_states, public.public_stats, public.groups,
+  public.group_members, public.group_challenges, public.ai_usage from anon, authenticated;
+revoke all on function public.is_group_member(uuid), public.handle_new_user(), public.push_state(integer, jsonb, jsonb),
+  public.create_group(text), public.join_group(text), public.leave_group(uuid), public.get_group_leaderboard(uuid),
+  public.delete_my_data(), public.consume_ai_quota(integer) from public, anon, authenticated;
 
 grant usage on schema public to authenticated;
 grant select, update on public.profiles to authenticated;

@@ -15,7 +15,7 @@ create or replace function public.state_has_progress(s jsonb)
 returns boolean
 language sql
 immutable
-set search_path = public
+set search_path = public, pg_temp
 as $$
   select coalesce(jsonb_array_length(case when jsonb_typeof(s -> 'attempts') = 'array' then s -> 'attempts' end), 0) > 0
       or coalesce((select count(*) from jsonb_object_keys(case when jsonb_typeof(s -> 'activities') = 'object' then s -> 'activities' else '{}'::jsonb end)), 0) > 0
@@ -34,7 +34,7 @@ create or replace function public.push_state(expected_revision integer, new_stat
 returns integer
 language plpgsql
 security invoker
-set search_path = public
+set search_path = public, pg_temp
 as $$
 declare
   uid uuid := auth.uid();
