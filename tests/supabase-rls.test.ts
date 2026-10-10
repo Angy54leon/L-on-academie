@@ -62,6 +62,28 @@ describe('schéma Supabase et sécurité RLS', () => {
     expect(rows[0].state.v).toBe(2);
   });
 
+  it('ré-exécuter les migrations ne supprime ni ne modifie aucune donnée', async () => {
+    const before = await db.query<{ n: number; s: string }>(
+      `select (select count(*) from auth.users)::int + (select count(*) from public.profiles)::int + (select count(*) from public.learner_states)::int + (select count(*) from public.public_stats)::int as n,
+              (select string_agg(user_id::text || ':' || revision || ':' || state::text, '|' order by user_id) from public.learner_states) as s`,
+    );
+    await db.exec(readFileSync('supabase/migrations/20261009000000_init.sql', 'utf8'));
+    await db.exec(readFileSync('supabase/migrations/20261010000000_autosave.sql', 'utf8'));
+    const after = await db.query<{ n: number; s: string }>(
+      `select (select count(*) from auth.users)::int + (select count(*) from public.profiles)::int + (select count(*) from public.learner_states)::int + (select count(*) from public.public_stats)::int as n,
+              (select string_agg(user_id::text || ':' || revision || ':' || state::text, '|' order by user_id) from public.learner_states) as s`,
+    );
+    expect(before.rows[0].n).toBeGreaterThan(3);
+    expect(after.rows[0]).toEqual(before.rows[0]);
+  });
+
+  it('active la sécurité RLS sur toutes les tables et n’ouvre rien aux visiteurs anonymes', async () => {
+    const noRls = await db.query(`select relname from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity`);
+    expect(noRls.rows).toEqual([]);
+    const anonGrants = await db.query(`select table_name, privilege_type from information_schema.role_table_grants where table_schema = 'public' and grantee = 'anon'`);
+    expect(anonGrants.rows).toEqual([]);
+  });
+
   it('refuse de remplacer une progression par une progression vide, sauf remise à zéro volontaire', async () => {
     const withProgress = JSON.stringify({ attempts: [{ id: 'a1' }], activities: {}, assessments: [], profile: { onboarded: true } });
     const empty = JSON.stringify({ attempts: [], activities: {}, assessments: [], profile: { onboarded: false } });
