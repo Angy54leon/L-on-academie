@@ -1,4 +1,7 @@
-# Configuration minimale pour la CLI Supabase (facultatif).
+# Configuration Supabase du projet.
+# Lue par l'intégration GitHub de Supabase (« Deploy to production ») : à chaque envoi sur la branche
+# de production, les nouveaux fichiers de supabase/migrations sont appliqués et les fonctions
+# déclarées ci-dessous sont déployées. Aussi utilisée par la CLI Supabase (facultatif).
 project_id = "leon-academie"
 
 [functions.teacher]
