@@ -1,9 +1,13 @@
 import { Link } from 'react-router';
 import { PROGRAM_DAYS, VOCAB, programItems } from '../content';
+import { chooseGuestMode } from '../services/session';
+import { canUseApp, useAccount } from '../state/account';
 import { useLearner } from '../state/store';
 
 export function HomePage() {
   const s = useLearner();
+  const account = useAccount();
+  const needsChoice = account.configured && !canUseApp(account);
   const itemCount = programItems().filter((i) => i.day <= 14).length;
   return (
     <div>
@@ -16,23 +20,52 @@ export function HomePage() {
           <p className="lead">
             LÉON ACADÉMIE est un entraînement intensif de 14 jours (+10 jours facultatifs) qui s’adapte à vos résultats réels : leçons, exercices corrigés et expliqués, vocabulaire en répétition espacée, oral et conversation.
           </p>
-          <div className="row" style={{ marginTop: 18 }}>
-            {s.profile.onboarded ? (
-              <Link to="/dashboard" className="btn primary">
-                Continuer mon parcours →
-              </Link>
-            ) : (
-              <Link to="/bienvenue" className="btn primary">
-                Commencer gratuitement →
-              </Link>
-            )}
-            <Link to="/parametres" className="btn ghost">
-              Paramètres
-            </Link>
-          </div>
-          <p className="small muted" style={{ marginTop: 14 }}>
-            Sans compte, sans abonnement : vos données restent sur cet appareil. Installable sur téléphone et utilisable hors ligne.
-          </p>
+          {needsChoice ? (
+            <>
+              <div className="row" style={{ marginTop: 18 }}>
+                <Link to="/inscription" className="btn primary">
+                  Créer un compte gratuit →
+                </Link>
+                <Link to="/connexion" className="btn">
+                  Se connecter
+                </Link>
+                <button type="button" className="btn ghost" onClick={chooseGuestMode}>
+                  Continuer sans compte
+                </button>
+              </div>
+              <p className="small muted" style={{ marginTop: 14 }}>
+                Avec un compte, votre progression est sauvegardée automatiquement en ligne et vous la retrouvez sur tous vos appareils. Sans compte, elle reste uniquement sur cet appareil.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="row" style={{ marginTop: 18 }}>
+                {s.profile.onboarded ? (
+                  <Link to="/dashboard" className="btn primary">
+                    Continuer mon parcours →
+                  </Link>
+                ) : (
+                  <Link to="/bienvenue" className="btn primary">
+                    Commencer gratuitement →
+                  </Link>
+                )}
+                {account.configured && account.status !== 'signed-in' ? (
+                  <Link to="/inscription" className="btn ghost">
+                    Sauvegarder en ligne (compte gratuit)
+                  </Link>
+                ) : (
+                  <Link to="/parametres" className="btn ghost">
+                    Paramètres
+                  </Link>
+                )}
+              </div>
+              <p className="small muted" style={{ marginTop: 14 }}>
+                {account.status === 'signed-in'
+                  ? `Connecté : ${account.user?.email}. Votre progression est sauvegardée automatiquement en ligne.`
+                  : 'Sans abonnement. Sans compte, vos données restent sur cet appareil. Installable sur téléphone et utilisable hors ligne.'}
+              </p>
+            </>
+          )}
         </div>
         <div className="orb float" aria-hidden>
           <img src="./icons/icon.svg" alt="" style={{ width: '38%', opacity: 0.95 }} />

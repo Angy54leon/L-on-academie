@@ -1,4 +1,7 @@
 // Client Supabase chargé à la demande (aucun téléchargement si Supabase n'est pas configuré).
+// - Flux PKCE : les liens des e-mails reviennent avec « ?code=… » (compatible avec la navigation « #/ » de l'application).
+// - La session est conservée par le navigateur et renouvelée automatiquement : l'utilisateur reste
+//   connecté d'une visite à l'autre, jusqu'à sa déconnexion ou l'expiration de la session.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { config, supabaseConfigured } from './config';
 
@@ -9,7 +12,7 @@ export function getSupabase(): Promise<SupabaseClient | null> {
   if (!clientPromise) {
     clientPromise = import('@supabase/supabase-js').then(({ createClient }) =>
       createClient(config.supabaseUrl, config.supabaseAnonKey, {
-        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce' },
       }),
     );
   }

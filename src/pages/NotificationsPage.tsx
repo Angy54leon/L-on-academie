@@ -15,10 +15,10 @@ export function NotificationsPage() {
         <p>Rappels internes à l’application, générés à partir de votre progression. Aucune notification n’est envoyée en dehors de l’application.</p>
       </PageHead>
       <div className="row" style={{ marginBottom: 12 }}>
-        <button type="button" className="btn sm" disabled={!unread} onClick={() => update((st) => markNotificationsRead(st), { silent: true })}>
+        <button type="button" className="btn sm" disabled={!unread} onClick={() => update((st) => markNotificationsRead(st))}>
           Tout marquer comme lu
         </button>
-        <button type="button" className="btn sm ghost" disabled={!s.notifications.length} onClick={() => update((st) => ({ ...st, notifications: [] }), { silent: true })}>
+        <button type="button" className="btn sm ghost" disabled={!s.notifications.length} onClick={() => update((st) => ({ ...st, notifications: [] }))}>
           Tout effacer
         </button>
       </div>
@@ -31,7 +31,7 @@ export function NotificationsPage() {
               className="btn ghost block"
               style={{ justifyContent: 'flex-start', textAlign: 'left', height: 'auto', padding: 10, borderRadius: 10, fontWeight: n.read ? 400 : 600 }}
               onClick={() => {
-                update((st) => markNotificationsRead(st, [n.id]), { silent: true });
+                update((st) => markNotificationsRead(st, [n.id]));
                 if (n.link) nav(n.link);
               }}
             >

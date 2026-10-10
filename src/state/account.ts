@@ -1,18 +1,38 @@
-// État du compte (connexion Supabase facultative).
+// État du compte (Supabase Auth). La logique (connexion, restauration…) est dans services/session.ts.
 import { useSyncExternalStore } from 'react';
 import { supabaseConfigured } from '../services/config';
-import { getSupabase } from '../services/supabase';
+import { isGuestModeChosen } from '../services/storage';
+
+export type AccountStatus =
+  | 'local' // Supabase non configuré : mode local uniquement
+  | 'loading' // vérification de la session au démarrage
+  | 'signed-out'
+  | 'restoring' // récupération de la progression en ligne
+  | 'choice' // l'utilisateur doit décider du sort des données utilisées sans compte
+  | 'restore-error' // impossible de récupérer la progression (réseau…)
+  | 'signed-in';
 
 export interface AccountState {
   configured: boolean;
-  ready: boolean;
+  status: AccountStatus;
   user: { id: string; email: string } | null;
-  syncing: boolean;
-  lastSync?: string;
-  syncError?: string;
+  /** L'utilisateur a choisi d'utiliser l'application sans compte. */
+  guestMode: boolean;
+  /** Message affiché sur l'écran de connexion (session expirée, lien invalide…). */
+  notice?: string;
+  restoreError?: string;
+  /** Résumé des deux progressions à départager (statut « choice »). */
+  choice?: { accountDays: number; accountAnswers: number; deviceDays: number; deviceAnswers: number };
+  /** La copie locale peut être utilisée si la restauration échoue. */
+  canUseCache?: boolean;
 }
 
-let account: AccountState = { configured: supabaseConfigured(), ready: !supabaseConfigured(), user: null, syncing: false };
+let account: AccountState = {
+  configured: supabaseConfigured(),
+  status: supabaseConfigured() ? 'loading' : 'local',
+  user: null,
+  guestMode: isGuestModeChosen(),
+};
 const listeners = new Set<() => void>();
 
 export function setAccount(patch: Partial<AccountState>) {
@@ -35,32 +55,7 @@ export function useAccount(): AccountState {
   );
 }
 
-let initialized = false;
-const loginListeners = new Set<() => void>();
-
-export function onLogin(l: () => void) {
-  loginListeners.add(l);
-  return () => loginListeners.delete(l);
-}
-
-/** Initialise l'écoute de la session (appelé une fois au démarrage). */
-export async function initAccount(): Promise<void> {
-  if (initialized) return;
-  initialized = true;
-  const sb = await getSupabase();
-  if (!sb) return;
-  try {
-    const { data } = await sb.auth.getSession();
-    const u = data.session?.user;
-    setAccount({ ready: true, user: u ? { id: u.id, email: u.email ?? '' } : null });
-    if (u) for (const l of loginListeners) l();
-  } catch {
-    setAccount({ ready: true, user: null, syncError: 'Impossible de contacter le serveur de comptes.' });
-  }
-  sb.auth.onAuthStateChange((event, session) => {
-    const u = session?.user;
-    const wasLogged = !!account.user;
-    setAccount({ user: u ? { id: u.id, email: u.email ?? '' } : null });
-    if (u && !wasLogged && event === 'SIGNED_IN') for (const l of loginListeners) l();
-  });
+/** L'application peut-elle afficher les pages d'apprentissage ? */
+export function canUseApp(a: AccountState): boolean {
+  return a.status === 'local' || a.status === 'signed-in' || (a.status === 'signed-out' && a.guestMode);
 }

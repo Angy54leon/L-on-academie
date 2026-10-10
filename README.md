@@ -16,7 +16,7 @@ Elle fonctionne **gratuitement, sans compte et sans clé API**. Les fonctions av
 3. [Installation (débutant)](#3-installation-débutant)
 4. [Utiliser l’application](#4-utiliser-lapplication)
 5. [Activer le professeur IA](#5-activer-le-professeur-ia-facultatif)
-6. [Activer les comptes et l’espace social (Supabase)](#6-activer-les-comptes-et-lespace-social-supabase-facultatif)
+6. [Activer les comptes et la sauvegarde en ligne (Supabase)](#6-activer-les-comptes-et-la-sauvegarde-en-ligne-supabase-facultatif)
 7. [Mettre l’application en ligne](#7-mettre-lapplication-en-ligne)
 8. [Architecture du projet](#8-architecture-du-projet)
 9. [Fichiers de configuration](#9-fichiers-de-configuration)
@@ -61,7 +61,7 @@ Sans aucune configuration (mode local gratuit) :
 |---|---|---|
 | **Professeur IA** (conversation libre, corrections détaillées des textes) | Un fournisseur de modèle compatible « OpenAI chat completions » (voir §5) | Gratuit possible (Ollama en local, ou offres gratuites **avec quotas** de Groq / Google Gemini – à vérifier) |
 | **Comptes, connexion, mot de passe oublié** | Un projet Supabase (§6) | Offre gratuite Supabase (quotas, mise en pause après 7 jours d’inactivité) |
-| **Synchronisation entre appareils** (avec fusion sans perte en cas de conflit) | Supabase | idem |
+| **Sauvegarde automatique en ligne et synchronisation entre appareils** (fusion sans perte en cas de conflit) | Supabase | idem |
 | **Groupes, invitations, classements, défis entre amis** | Supabase | idem |
 | **Suppression du compte** | Supabase + fonction `delete-account` déployée | idem |
 
@@ -161,47 +161,79 @@ Optionnel : `npx supabase secrets set ALLOWED_ORIGIN=https://votre-site.exemple`
 
 ---
 
-## 6. Activer les comptes et l’espace social (Supabase, facultatif)
+## 6. Activer les comptes et la sauvegarde en ligne (Supabase, facultatif)
 
-Supabase est un service de base de données avec authentification. Son **offre gratuite** suffit pour un petit groupe d’amis (quotas ; un projet inactif 7 jours est mis en pause et se réactive depuis le tableau de bord). Vérifiez les conditions actuelles sur supabase.com/pricing.
+Supabase fournit l’authentification (e-mail + mot de passe) et la base de données. Son **offre gratuite** suffit pour un usage personnel ou un petit groupe (quotas ; un projet inactif 7 jours est mis en pause et se réactive depuis le tableau de bord). Vérifiez les conditions actuelles sur supabase.com/pricing.
 
-### Étapes
+### Ce que vous obtenez
 
-1. Créez un compte sur <https://supabase.com> puis un **nouveau projet** (notez le mot de passe de la base).
-2. Dans le projet : **SQL Editor** → « New query » → collez tout le contenu de `supabase/migrations/20261009000000_init.sql` → **Run**. Cela crée les tables, les politiques de sécurité (RLS) et les fonctions.
-3. **Project Settings → API** : copiez « Project URL » et la clé « anon public ».
-4. Dans votre fichier `.env` :
-   ```bash
-   VITE_SUPABASE_URL=https://votre-projet.supabase.co
-   VITE_SUPABASE_ANON_KEY=votre-cle-anon-publique
-   ```
-   (Ces deux valeurs sont publiques par conception. Ne mettez **jamais** la clé `service_role` dans `.env` ni dans le code.)
-5. **Authentication → URL Configuration** : indiquez l’adresse de votre site (« Site URL ») pour les e-mails de confirmation et de réinitialisation.
-6. Déployez les fonctions serveur (suppression de compte et, si vous le souhaitez, professeur IA) avec la CLI Supabase :
+- **Inscription** (e-mail, mot de passe, confirmation), **connexion**, **déconnexion**, **mot de passe oublié** par e-mail, page **Mon compte** (e-mail, état de la sauvegarde, changement de mot de passe, suppression).
+- **Sauvegarde automatique et invisible** de toute la progression (réponses, leçons, évaluations, vocabulaire, statistiques, badges, préférences…) : environ 1,5 s après chaque action (8 s au maximum en cas d’activité continue), quand l’onglet passe en arrière-plan, et un dernier envoi à la fermeture de la page.
+- **Indicateur discret** en haut de l’écran : « Sauvegarde en cours… », « Progression sauvegardée », « Hors ligne — en attente », « Problème de sauvegarde — nouvelle tentative… ». Il n’affiche « sauvegardée » qu’après la **confirmation du serveur**.
+- **Hors ligne / erreur réseau** : les modifications restent sur l’appareil et sont renvoyées automatiquement (nouvelles tentatives espacées de 2 s à 60 s, et dès le retour du réseau).
+- **Restauration avant affichage** : à la connexion, la progression en ligne est récupérée *avant* d’afficher le tableau de bord. Si le serveur ne répond pas, l’application ne montre jamais une progression vide : elle propose de réessayer ou d’utiliser la copie de cet appareil.
+- **Plusieurs appareils** : la base en ligne est la source de vérité ; si deux appareils ont modifié les données, elles sont **fusionnées** (rien n’est écrasé).
+- **Protection contre l’effacement accidentel** : le serveur **refuse** de remplacer une progression existante par une progression vide (sauf « Recommencer le parcours », demandé explicitement).
+- **Données utilisées sans compte** : à la première connexion, elles sont transférées dans le compte s’il est vide ; si le compte contient déjà une progression, l’application demande quoi faire (réunir les deux, recommandé, ou garder seulement le compte). Les données locales ne sont archivées qu’**après** confirmation de la sauvegarde en ligne.
+- **Sécurité** : les mots de passe sont gérés par Supabase Auth (stockés hachés, jamais par l’application) ; chaque utilisateur n’accède qu’à ses propres données (politiques RLS) ; seule la clé **publique** est utilisée dans le navigateur.
+
+### Étapes (tableau de bord Supabase)
+
+1. Créez un compte sur <https://supabase.com> puis un **nouveau projet**.
+2. **SQL Editor** → « New query » → collez le contenu de `supabase/migrations/20261009000000_init.sql` → **Run**.
+3. Nouvelle requête → collez `supabase/migrations/20261010000000_autosave.sql` → **Run** (à exécuter **après** le premier ; il peut être relancé sans risque).
+4. **Project Settings → API Keys** : copiez l’**URL du projet** et la clé **publique** (« publishable », qui commence par `sb_publishable_…`, ou l’ancienne clé « anon »). **Ne copiez jamais** la clé `service_role` / « secret ».
+5. **Authentication → URL Configuration** :
+   - **Site URL** : l’adresse de votre site, par exemple `https://votre-app.vercel.app/` ;
+   - **Redirect URLs** : ajoutez `https://votre-app.vercel.app/**` (et `http://localhost:5173/**` pour le développement local). Sans cela, les liens de confirmation et de réinitialisation ne ramènent pas vers l’application.
+6. **E-mails (important)** : le service d’e-mail intégré de Supabase est fortement limité (quelques e-mails par heure) et, sur les projets récents, n’envoie qu’aux adresses des membres de l’équipe du projet. Pour de vrais utilisateurs, choisissez :
+   - **Option A (recommandée)** : **Authentication → Emails → SMTP Settings** et branchez un service SMTP avec offre gratuite (par exemple Brevo, environ 300 e-mails/jour ; conditions à vérifier). Les identifiants SMTP se saisissent **dans le tableau de bord Supabase**, jamais dans le code ;
+   - **Option B** : désactiver la confirmation d’adresse (réglages du fournisseur **Email** : « Confirm email »). Plus simple, mais n’importe quelle adresse peut être utilisée et « Mot de passe oublié » nécessite quand même l’envoi d’e-mails.
+7. Facultatif : dans les réglages du fournisseur **Email**, fixez la longueur minimale du mot de passe à 8 (l’application l’exige déjà côté formulaire).
+8. Facultatif (suppression de compte depuis l’application, professeur IA) — fonctions serveur avec la CLI Supabase :
    ```bash
    npx supabase login
    npx supabase link --project-ref VOTRE_REF_PROJET
    npx supabase functions deploy delete-account
    npx supabase functions deploy teacher      # si vous activez l'IA (voir §5)
    ```
-7. Relancez l’application : « Paramètres › Compte » permet de créer un compte et de se connecter ; « Social » permet de créer un groupe et d’inviter des amis avec un code.
 
-### Ce que fait la synchronisation
+### Variables d’environnement
 
-- À la connexion, au retour en ligne et quelques secondes après chaque modification, la progression est envoyée avec un **contrôle de version**.
-- Si deux appareils ont modifié les données, elles sont **fusionnées** (historiques réunis, meilleurs scores et cartes les plus récentes conservés). Les deux versions d’origine sont gardées dans « Paramètres › Sauvegardes » et une notification vous prévient. Rien n’est écrasé silencieusement.
+| Variable | Valeur | Publique ? |
+| --- | --- | --- |
+| `VITE_SUPABASE_URL` | `https://VOTRE-REF.supabase.co` | Oui (visible dans le navigateur, c’est normal) |
+| `VITE_SUPABASE_ANON_KEY` | clé « publishable » (`sb_publishable_…`) ou « anon » | Oui (la sécurité repose sur les règles RLS) |
+| `VITE_APP_URL` (facultatif) | `https://votre-app.vercel.app/` : adresse utilisée dans les liens des e-mails | Oui |
+
+En local : mettez-les dans `.env` (ignoré par Git). Sur Vercel : voir §7.
+
+### Limites à connaître
+
+- Les liens reçus par e-mail (confirmation, réinitialisation) doivent être ouverts **dans le navigateur où la demande a été faite** (sécurité PKCE). Ouverts ailleurs, l’adresse est quand même confirmée : il suffit de se connecter.
+- L’envoi de dernière seconde à la fermeture de la page est limité par les navigateurs (~60 Ko) : la sauvegarde ne repose pas dessus, les envois réguliers ont déjà eu lieu.
+- Deux onglets ouverts sur le même compte fusionnent leurs modifications via le serveur ; évitez quand même de travailler dans deux onglets en même temps.
 
 ---
 
 ## 7. Mettre l’application en ligne
 
-L’application est un site statique : après `npm run build`, il suffit d’héberger le dossier `dist/`. Hébergeurs avec offre gratuite (conditions à vérifier) :
+L’application est un site statique : après `npm run build`, il suffit d’héberger le dossier `dist/`. Les variables `VITE_*` sont intégrées **au moment du build** : après les avoir ajoutées ou modifiées, il faut **reconstruire / redéployer**. Aucune règle de redirection n’est nécessaire (navigation par `#/`).
 
-- **Netlify** : créez un compte, puis glissez-déposez le dossier `dist/` sur <https://app.netlify.com/drop>.
+### Vercel (déploiement relié à GitHub)
+
+1. Vercel → votre projet → **Settings → Environment Variables** : ajoutez `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` et, si vous voulez, `VITE_APP_URL` (cochez au moins *Production*, et *Preview* si vous testez les branches).
+2. **Deployments** → dernier déploiement → **⋯ → Redeploy** (indispensable : les variables ne sont prises en compte qu’au build).
+3. Vérifiez que l’adresse Vercel figure dans **Site URL** et **Redirect URLs** de Supabase (§6, étape 5). Pour les déploiements de prévisualisation, ajoutez aussi leur adresse (par exemple `https://*-votre-compte.vercel.app/**`).
+4. Testez : créez un compte, confirmez l’e-mail, faites un exercice, puis connectez-vous depuis un autre appareil.
+
+Réglages de build Vercel (détectés automatiquement) : commande `npm run build`, dossier de sortie `dist`.
+
+### Autres hébergeurs gratuits (conditions à vérifier)
+
+- **Netlify** : glissez-déposez le dossier `dist/` sur <https://app.netlify.com/drop>.
 - **Cloudflare Pages** : « Create a project » → « Direct Upload » → dossier `dist/`.
 - **GitHub Pages** : gratuit pour les dépôts publics.
-
-Les variables `VITE_*` sont intégrées au moment du `npm run build` : remplissez `.env` **avant** de construire. Aucune règle de redirection n’est nécessaire (navigation par `#/`).
 
 > Rien n’est publié automatiquement : c’est vous qui décidez de mettre le site en ligne.
 
@@ -233,10 +265,14 @@ src/
     learner.ts        Enregistrement des réponses et modifications de l'état
     rewards.ts, challenges.ts, notifications.ts
     state.ts          Modèle des données sauvegardées (validé par Zod)
-    merge.ts, sync.ts Fusion et décisions de synchronisation
+    merge.ts, sync.ts Fusion et plan de restauration à la connexion (testés)
     localPartner.ts   Partenaire de conversation local
   services/           Accès au monde extérieur (stockage, voix, Supabase, IA)
-  state/              Magasin d'état React (une seule source de vérité)
+    storage.ts        Stockage local, un espace séparé par compte (+ « sans compte »)
+    auth.ts           Inscription, connexion, mot de passe (messages en français)
+    session.ts        Démarrage, restauration avant affichage, déconnexion
+    autosave.ts       Sauvegarde automatique, nouvelles tentatives, hors ligne
+  state/              Magasin d'état React (une seule source de vérité) et état du compte
   components/         Composants d'interface (exercices, graphiques, mise en page)
   pages/              Pages de l'application
 supabase/
@@ -278,10 +314,13 @@ Les tests vérifient notamment :
 - **le contenu** : 14 + 10 jours valides, identifiants uniques, chaque réponse attendue est bien acceptée par le correcteur, aucun « piège » ne contredit une bonne réponse, évaluations équivalentes (même répartition de compétences) ;
 - **la correction** : variantes, contractions, fautes de frappe vs erreurs de grammaire, pièges, oral, écriture, détecteur d’erreurs (sans fausses alertes sur des phrases correctes) ;
 - **l’apprentissage** : répétition espacée (jamais « maîtrisé » après une seule réponse), enregistrement des réponses, déblocage, remédiation, séries, adaptation, évaluations, conseil d’extension, badges, défis, notifications, validation des données ;
-- **la synchronisation** : envoi, récupération, fusion sans perte, cœur du professeur IA (validation, prompt côté serveur, limitation) ;
-- **la sécurité de la base Supabase** dans une vraie base Postgres embarquée (PGlite) : isolation des données, contrôle de concurrence, groupes réservés aux membres, statistiques masquées tant qu’elles ne sont pas partagées, quota IA, suppression des données.
+- **la restauration à la connexion** : la base en ligne prime, jamais de remplacement par une copie vide, envoi des modifications non sauvegardées, fusion quand les deux versions ont changé, copie d’un autre compte ignorée, transfert des données sans compte, choix demandé quand les deux ont une progression ; cœur du professeur IA (validation, prompt côté serveur, limitation) ;
+- **la sécurité de la base Supabase** dans une vraie base Postgres embarquée (PGlite), avec les deux migrations : isolation des données, contrôle de concurrence, refus de remplacer une progression par du vide (sauf remise à zéro volontaire), refus sans connexion, groupes réservés aux membres, statistiques masquées tant qu’elles ne sont pas partagées, quota IA, suppression des données.
 
-Des tests de bout en bout dans un navigateur (Chromium) ont aussi été réalisés pendant le développement (parcours complet sur mobile et ordinateur, mode hors ligne, conversation avec un faux fournisseur d’IA) ; ils ne font pas partie de `npm test`.
+Des tests de bout en bout dans un navigateur (Chromium/Playwright) ont aussi été réalisés pendant le développement ; ils ne font pas partie de `npm test` :
+
+- parcours complet sur mobile et ordinateur, mode hors ligne (PWA), conversation avec un faux fournisseur d’IA ;
+- **comptes et sauvegarde**, contre une pile locale équivalente à Supabase (vrai serveur d’authentification Supabase « GoTrue », vraie base Postgres avec RLS, boîte e-mail de test) : inscription + lien de confirmation, connexion, leçon sauvegardée en ligne, fermeture/retour, déconnexion/reconnexion, autre navigateur et mobile, second utilisateur isolé (y compris attaque directe de l’API), panne du serveur et mode avion sans perte, mot de passe oublié, fusion des données sans compte, redémarrage hors ligne, remise à zéro volontaire (24 vérifications).
 
 ---
 
@@ -291,7 +330,8 @@ Des tests de bout en bout dans un navigateur (Chromium) ont aussi été réalis�
 - **Voix** : LÉON ACADÉMIE n’enregistre ni ne conserve votre voix. La reconnaissance vocale est réalisée par le navigateur (dans **Chrome, l’audio est transmis à un service de Google** pour la transcription ; l’application l’indique avant la première utilisation). La fonction « s’enregistrer » garde l’audio en mémoire uniquement.
 - **Secrets** : aucune clé secrète dans le code ni dans le dépôt. La clé du modèle d’IA reste côté serveur. `.env` est ignoré par Git.
 - **Base distante** : RLS sur toutes les tables ; chacun ne lit que ses données ; les membres d’un groupe ne voient que le pseudo des autres et les statistiques que chacun a choisi de partager (rien par défaut).
-- **Suppression** : « Paramètres » permet de supprimer ses données locales, ses données en ligne, ou son compte entier.
+- **Mots de passe** : jamais stockés ni journalisés par l’application ; ils sont transmis uniquement à Supabase Auth (HTTPS), qui les stocke hachés (bcrypt).
+- **Suppression** : « Paramètres » permet de supprimer ses données locales ; « Mon compte » permet de supprimer ses données en ligne ou son compte entier.
 
 ---
 
@@ -302,7 +342,7 @@ Des tests de bout en bout dans un navigateur (Chromium) ont aussi été réalis�
 - **Correcteur local** : il repère une liste de 47 règles d’erreurs fréquentes des francophones, pas toutes les erreurs. L’expression écrite est estimée automatiquement (longueur, mots attendus, erreurs repérées) : c’est une indication, pas la note d’un correcteur humain.
 - **Professeur IA** : les réponses d’un modèle peuvent contenir des erreurs ; la qualité dépend du modèle choisi ; les offres gratuites ont des quotas.
 - **Classements** : ils reposent sur les progrès enregistrés par l’appareil de chaque membre ; un utilisateur techniquement averti pourrait les falsifier (pas de correction côté serveur).
-- **Supabase et fonctions Edge** : le schéma SQL et ses règles de sécurité sont testés automatiquement (PGlite) et le chemin du professeur IA a été testé avec le serveur de développement ; en revanche, les fonctions Edge et la connexion à un vrai projet Supabase n’ont pas pu être testées ici sans compte : faites un essai après configuration.
+- **Supabase et fonctions Edge** : les comptes et la sauvegarde ont été testés de bout en bout contre le vrai serveur d’authentification de Supabase et une vraie base Postgres en local ; en revanche, un **vrai projet Supabase hébergé** (envoi réel d’e-mails, réglages du tableau de bord) et les fonctions Edge (suppression de compte, IA) n’ont pas pu être testés ici sans compte : faites l’essai décrit au §7 après configuration.
 - **Voix de synthèse** : leur qualité dépend de votre appareil (les voix « naturelles » d’Edge, Chrome ou Safari sont les meilleures).
 - **Stockage local** : effacer les données du navigateur efface la progression locale ; exportez-la régulièrement ou utilisez un compte.
 

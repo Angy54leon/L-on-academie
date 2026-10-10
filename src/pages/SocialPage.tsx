@@ -35,7 +35,7 @@ export default function SocialPage() {
         </div>
       ) : !account.user ? (
         <div className="notice info" style={{ marginBottom: 16 }}>
-          Connectez-vous pour rejoindre ou créer un groupe. <Link to="/parametres#compte">Se connecter ou créer un compte →</Link>
+          Connectez-vous pour rejoindre ou créer un groupe. <Link to="/connexion?suite=/social">Se connecter ou créer un compte →</Link>
         </div>
       ) : !online ? (
         <div className="notice warn" style={{ marginBottom: 16 }}>

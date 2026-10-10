@@ -3,6 +3,7 @@ import { NavLink, Link, useLocation } from 'react-router';
 import { unreadCount } from '../core/notifications';
 import { useAccount } from '../state/account';
 import { onBadges, useLearner } from '../state/store';
+import { SaveIndicator } from './AccountGate';
 import { Modal, toast, Toasts, useOnline } from './ui';
 
 const NAV = [
@@ -60,7 +61,23 @@ export function Layout({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <div className="sidebar-foot">
-          {account.configured ? (account.user ? `Connecté : ${account.user.email}` : 'Mode local (non connecté)') : 'Mode local · données sur cet appareil'}
+          {!account.configured ? (
+            'Mode local · données sur cet appareil'
+          ) : account.user && account.status !== 'signed-out' ? (
+            <Link to="/compte" className="account-link" title="Mon compte">
+              <span className="avatar" aria-hidden>
+                {(account.user?.email ?? '?').charAt(0).toUpperCase()}
+              </span>
+              <span className="account-email">{account.user?.email}</span>
+            </Link>
+          ) : (
+            <>
+              <span>Sans compte · données sur cet appareil</span>
+              <Link to="/connexion" className="btn sm block" style={{ marginTop: 8 }}>
+                Se connecter
+              </Link>
+            </>
+          )}
         </div>
       </aside>
       <div className="main">
@@ -75,10 +92,22 @@ export function Layout({ children }: { children: ReactNode }) {
               ⚡ Hors ligne
             </span>
           )}
-          {account.syncing && <span className="badge">⟳ Synchronisation…</span>}
+          <SaveIndicator />
           <span className="badge accent" title="Points d’expérience gagnés en réussissant des exercices">
             ✦ {state.xp} XP
           </span>
+          {account.configured && account.status === 'signed-in' && (
+            <Link to="/compte" className="btn icon sm ghost account-btn" aria-label={`Mon compte (${account.user?.email})`} title={account.user?.email}>
+              <span className="avatar sm" aria-hidden>
+                {(account.user?.email ?? '?').charAt(0).toUpperCase()}
+              </span>
+            </Link>
+          )}
+          {account.configured && account.status === 'signed-out' && (
+            <Link to="/connexion" className="btn sm ghost">
+              Se connecter
+            </Link>
+          )}
           <Link to="/notifications" className="btn icon sm ghost" style={{ position: 'relative' }} aria-label={`Notifications (${unread} non lues)`}>
             🔔
             {unread > 0 && (
@@ -111,7 +140,7 @@ export function Layout({ children }: { children: ReactNode }) {
       {more && (
         <Modal title="Menu" onClose={() => setMore(false)}>
           <div className="grid grid-2">
-            {[...NAV.filter((n) => !MOBILE.some((m) => m.to === n.to)), { to: '/notifications', label: 'Notifications', ico: '🔔' }, { to: '/', label: 'Page d’accueil', ico: '🏠' }].map((n) => (
+            {[...NAV.filter((n) => !MOBILE.some((m) => m.to === n.to)), { to: '/notifications', label: 'Notifications', ico: '🔔' }, ...(account.configured ? [account.status === 'signed-in' ? { to: '/compte', label: 'Mon compte', ico: '👤' } : { to: '/connexion', label: 'Se connecter', ico: '👤' }] : []), { to: '/', label: 'Page d’accueil', ico: '🏠' }].map((n) => (
               <Link key={n.to} to={n.to} className="btn">
                 {n.ico} {n.label}
               </Link>

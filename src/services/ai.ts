@@ -43,7 +43,7 @@ export async function checkAi(force = false): Promise<AiStatus> {
         const body = (await res.json()) as { configured?: boolean };
         status = body.configured
           ? needsLogin
-            ? { available: false, reason: 'Un professeur IA est disponible : connectez-vous (Paramètres › Compte) pour l’utiliser.' }
+            ? { available: false, reason: 'Un professeur IA est disponible : connectez-vous (bouton « Se connecter ») pour l’utiliser.' }
             : { available: true, reason: 'Professeur IA connecté.' }
           : { available: false, reason: 'Le serveur fonctionne mais aucune clé de modèle n’est configurée (voir README).' };
       }

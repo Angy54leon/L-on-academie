@@ -1575,3 +1575,215 @@ table.data td.num {
     padding-top: 0;
   }
 }
+
+/* ===================================================================
+   Comptes : connexion, inscription, mot de passe, mon compte
+   =================================================================== */
+
+.auth-wrap {
+  min-height: calc(100vh - 160px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 0;
+  gap: 14px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 440px;
+  animation: rise 0.35s ease both;
+}
+
+.auth-card.center {
+  text-align: center;
+}
+
+.auth-card h1 {
+  font-size: 1.55rem;
+  margin: 6px 0 4px;
+}
+
+.auth-card form {
+  margin-top: 16px;
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.auth-brand strong {
+  display: block;
+  letter-spacing: 0.18em;
+  font-size: 1rem;
+}
+
+.auth-brand span {
+  display: block;
+  font-size: 0.68rem;
+  letter-spacing: 0.32em;
+  color: var(--text-3);
+}
+
+.auth-footer {
+  font-size: 0.9rem;
+  color: var(--text-2);
+  text-align: center;
+}
+
+.auth-footer a,
+.auth-links a {
+  color: var(--accent-2);
+}
+
+.auth-links {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.88rem;
+  margin: 4px 0 14px;
+}
+
+div.field {
+  margin-bottom: 14px;
+}
+
+div.field > label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+}
+
+.input-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-row input {
+  padding-right: 48px;
+}
+
+.input-row input[aria-invalid='true'] {
+  border-color: var(--bad);
+}
+
+.input-row .reveal {
+  position: absolute;
+  right: 4px;
+  min-width: 40px;
+  height: 36px;
+  padding: 0 8px;
+}
+
+.field-error {
+  color: var(--bad);
+  font-size: 0.84rem;
+  margin-top: 6px;
+}
+
+.field-hint {
+  color: var(--text-3);
+  font-size: 0.82rem;
+  margin-top: 6px;
+}
+
+/* Indicateur de sauvegarde */
+.save-pill {
+  cursor: default;
+  font: inherit;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+button.save-pill[data-save-status='error'],
+button.save-pill[data-save-status='pending'] {
+  cursor: pointer;
+}
+
+.save-pill .spin {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.progress > .indeterminate {
+  width: 40%;
+  animation: indeterminate 1.3s ease-in-out infinite;
+}
+
+@keyframes indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(260%);
+  }
+}
+
+/* Menu du compte */
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--grad);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.85rem;
+  flex: none;
+}
+
+.avatar.sm {
+  width: 26px;
+  height: 26px;
+  font-size: 0.78rem;
+}
+
+.account-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  text-decoration: none;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+}
+
+.account-link:hover {
+  background: var(--surface-2);
+}
+
+.account-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .save-pill .save-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .auth-wrap {
+    min-height: auto;
+    padding: 8px 0;
+  }
+}

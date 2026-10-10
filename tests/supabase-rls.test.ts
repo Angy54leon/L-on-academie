@@ -41,6 +41,9 @@ beforeAll(async () => {
     grant execute on function auth.uid() to authenticated, anon;
   `);
   await db.exec(readFileSync('supabase/migrations/20261009000000_init.sql', 'utf8'));
+  await db.exec(readFileSync('supabase/migrations/20261010000000_autosave.sql', 'utf8'));
+  // La seconde migration peut être ré-exécutée sans risque.
+  await db.exec(readFileSync('supabase/migrations/20261010000000_autosave.sql', 'utf8'));
   await db.exec(`insert into auth.users (id, raw_user_meta_data) values ('${A}', '{"display_name":"Alice"}'), ('${B}', '{"display_name":"Bob"}'), ('${C}', '{}');`);
 }, 60_000);
 
@@ -56,6 +59,33 @@ describe('schéma Supabase et sécurité RLS', () => {
     expect((await as<{ rev: number }>(A, `select public.push_state(1, '{"v":3}'::jsonb, $1::jsonb) as rev`, [summary(false)]))[0].rev).toBe(-1);
     const rows = await as<{ state: { v: number } }>(A, 'select state from public.learner_states');
     expect(rows[0].state.v).toBe(2);
+  });
+
+  it('refuse de remplacer une progression par une progression vide, sauf remise à zéro volontaire', async () => {
+    const withProgress = JSON.stringify({ attempts: [{ id: 'a1' }], activities: {}, assessments: [], profile: { onboarded: true } });
+    const empty = JSON.stringify({ attempts: [], activities: {}, assessments: [], profile: { onboarded: false } });
+    expect((await as<{ rev: number }>(C, `select public.push_state(null, $1::jsonb, $2::jsonb) as rev`, [withProgress, summary(false)]))[0].rev).toBe(1);
+    expect((await as<{ rev: number }>(C, `select public.push_state(1, $1::jsonb, $2::jsonb) as rev`, [empty, summary(false)]))[0].rev).toBe(-2);
+    let rows = await as<{ state: { attempts: unknown[] } }>(C, 'select state from public.learner_states');
+    expect(rows[0].state.attempts).toHaveLength(1);
+    expect((await as<{ rev: number }>(C, `select public.push_state(1, $1::jsonb, $2::jsonb, true) as rev`, [empty, summary(false)]))[0].rev).toBe(2);
+    rows = await as<{ state: { attempts: unknown[] } }>(C, 'select state from public.learner_states');
+    expect(rows[0].state.attempts).toHaveLength(0);
+    expect(await fails(C, `select public.push_state(2, '[]'::jsonb, '{}'::jsonb)`)).toBe(true);
+    await db.exec(`delete from public.learner_states where user_id = '${C}'; delete from public.public_stats where user_id = '${C}';`);
+  });
+
+  it('refuse toute sauvegarde sans être connecté', async () => {
+    let failed = false;
+    try {
+      await db.exec(`reset role; select set_config('request.jwt.claim.sub', '', false); set role anon;`);
+      await db.query(`select public.push_state(null, '{}'::jsonb, '{}'::jsonb)`);
+    } catch {
+      failed = true;
+    } finally {
+      await db.exec('reset role;');
+    }
+    expect(failed).toBe(true);
   });
 
   it('isole les données de chaque utilisateur', async () => {

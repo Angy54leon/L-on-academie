@@ -1,17 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
-import { useLocation } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { GOALS, createInitialState, type GoalId, type Settings } from '../core/state';
 import { updateProfile, updateSettings } from '../core/learner';
 import { today } from '../core/progress';
 import { checkAi, type AiStatus } from '../services/ai';
-import { deleteAccount, deleteRemoteData, requestPasswordReset, signIn, signOut, signUp, updatePassword } from '../services/auth';
+import { requestReset, useSaveState } from '../services/autosave';
 import { supabaseConfigured } from '../services/config';
 import { loadVoices, recorderSupported, speak, sttSupported, ttsSupported, type VoiceInfo } from '../services/speech';
 import { addBackup, clearAllLocalData, clearBackups, exportState, importState, listBackups } from '../services/storage';
-import { syncNow } from '../services/sync';
 import { formatMinutes, PageHead, toast } from '../components/ui';
 import { useAccount } from '../state/account';
-import { getState, replaceState, update, useLearner } from '../state/store';
+import { getScope, getState, replaceState, update, useLearner } from '../state/store';
+import type { LearnerState } from '../core/state';
+
+/**
+ * Remplace la progression (import, restauration, remise à zéro) en conservant les informations
+ * techniques de l'espace courant (compte, révision en ligne) pour que la sauvegarde en ligne suive.
+ */
+function adopt(next: LearnerState) {
+  const cur = getState();
+  replaceState({ ...next, revision: Math.max(cur.revision, next.revision) + 1, updatedAt: new Date().toISOString(), meta: { ...cur.meta, dirty: true } });
+}
 
 function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
   return (
@@ -181,139 +190,46 @@ function VoiceSection() {
 
 function AccountSection() {
   const account = useAccount();
-  const location = useLocation();
-  const resetMode = location.search.includes('reinitialiser') || location.hash.includes('reinitialiser');
-  const [mode, setMode] = useState<'login' | 'signup' | 'reset'>('login');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState(useLearner().profile.displayName);
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [busy, setBusy] = useState(false);
-
+  const save = useSaveState();
   if (!supabaseConfigured()) {
     return (
-      <Section id="compte" title="Compte et synchronisation">
+      <Section id="compte" title="Compte et sauvegarde">
         <p>
           <strong>Mode local :</strong> vos données sont enregistrées dans ce navigateur, sans compte. Pour les transférer sur un autre appareil, utilisez l’export / import ci-dessous.
         </p>
-        <p className="small muted">Les comptes, la synchronisation entre appareils et l’espace social partagé deviennent disponibles quand le propriétaire de l’installation configure Supabase (gratuit, voir le README).</p>
+        <p className="small muted">Les comptes, la sauvegarde en ligne et l’espace social partagé deviennent disponibles quand le propriétaire de l’installation configure Supabase (gratuit, voir le README).</p>
       </Section>
     );
   }
-
-  const run = async (fn: () => Promise<{ ok: boolean; message: string }>) => {
-    setBusy(true);
-    setMsg(null);
-    const r = await fn();
-    setMsg({ ok: r.ok, text: r.message });
-    setBusy(false);
-  };
-
-  if (account.user) {
+  if (account.status === 'signed-in') {
     return (
-      <Section id="compte" title="Compte et synchronisation">
+      <Section id="compte" title="Compte et sauvegarde">
         <p>
-          Connecté : <strong>{account.user.email}</strong>
+          Connecté : <strong>{account.user?.email}</strong>
         </p>
         <p className="small muted">
-          {account.syncing ? 'Synchronisation en cours…' : account.lastSync ? `Dernière synchronisation : ${new Date(account.lastSync).toLocaleString('fr-FR')}` : 'Pas encore synchronisé.'}
-          {account.syncError && <span style={{ color: 'var(--bad)' }}> · {account.syncError}</span>}
+          Sauvegarde automatique en ligne activée.{' '}
+          {save.lastSavedAt ? `Dernière sauvegarde confirmée : ${new Date(save.lastSavedAt).toLocaleString('fr-FR')}.` : ''}
         </p>
-        <div className="row">
-          <button type="button" className="btn sm" disabled={busy} onClick={() => run(syncNow)}>
-            ⟳ Synchroniser maintenant
-          </button>
-          <button type="button" className="btn sm ghost" onClick={() => void signOut()}>
-            Se déconnecter
-          </button>
-        </div>
-        {resetMode && (
-          <form
-            style={{ marginTop: 16 }}
-            onSubmit={(e) => {
-              e.preventDefault();
-              void run(() => updatePassword(password));
-            }}
-          >
-            <label className="field">
-              <span>Nouveau mot de passe</span>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} autoComplete="new-password" />
-            </label>
-            <button className="btn sm" type="submit" disabled={busy}>
-              Enregistrer le mot de passe
-            </button>
-          </form>
-        )}
-        <hr className="sep" />
-        <h3>Supprimer mes données</h3>
-        <div className="row">
-          <button
-            type="button"
-            className="btn sm danger"
-            onClick={() => {
-              if (confirm('Supprimer vos données en ligne (progression, statistiques partagées, groupes) ? Vos données locales restent sur cet appareil.')) void run(deleteRemoteData);
-            }}
-          >
-            Supprimer mes données en ligne
-          </button>
-          <button
-            type="button"
-            className="btn sm danger"
-            onClick={() => {
-              if (confirm('Supprimer définitivement votre compte et toutes vos données en ligne ? Cette action est irréversible.')) void run(deleteAccount);
-            }}
-          >
-            Supprimer mon compte
-          </button>
-        </div>
-        {msg && <div className={`notice small ${msg.ok ? 'good' : 'bad'}`} style={{ marginTop: 10 }}>{msg.text}</div>}
+        <Link to="/compte" className="btn sm">
+          Gérer mon compte
+        </Link>
       </Section>
     );
   }
-
   return (
-    <Section id="compte" title="Compte et synchronisation">
-      <p className="small">Facultatif : un compte permet de sauvegarder votre progression en ligne, de la retrouver sur plusieurs appareils et de rejoindre des groupes. Votre progression locale actuelle sera conservée et fusionnée.</p>
-      <div className="segmented" role="group" aria-label="Type de formulaire" style={{ marginBottom: 12 }}>
-        <button type="button" aria-pressed={mode === 'login'} onClick={() => setMode('login')}>
-          Connexion
-        </button>
-        <button type="button" aria-pressed={mode === 'signup'} onClick={() => setMode('signup')}>
+    <Section id="compte" title="Compte et sauvegarde">
+      <p className="small">
+        Vous utilisez l’application sans compte : votre progression est enregistrée uniquement sur cet appareil. Avec un compte gratuit, elle est sauvegardée automatiquement en ligne et vous la retrouvez sur tous vos appareils. Votre progression actuelle sera transférée dans le compte.
+      </p>
+      <div className="row">
+        <Link to="/inscription" className="btn primary sm">
           Créer un compte
-        </button>
-        <button type="button" aria-pressed={mode === 'reset'} onClick={() => setMode('reset')}>
-          Mot de passe oublié
-        </button>
+        </Link>
+        <Link to="/connexion" className="btn sm">
+          Se connecter
+        </Link>
       </div>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (mode === 'login') void run(() => signIn(email, password));
-          else if (mode === 'signup') void run(() => signUp(email, password, name));
-          else void run(() => requestPasswordReset(email));
-        }}
-      >
-        {mode === 'signup' && (
-          <label className="field">
-            <span>Pseudo</span>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
-          </label>
-        )}
-        <label className="field">
-          <span>E-mail</span>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
-        </label>
-        {mode !== 'reset' && (
-          <label className="field">
-            <span>Mot de passe {mode === 'signup' && '(8 caractères minimum)'}</span>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={mode === 'signup' ? 8 : 1} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} />
-          </label>
-        )}
-        <button className="btn primary" type="submit" disabled={busy}>
-          {mode === 'login' ? 'Se connecter' : mode === 'signup' ? 'Créer mon compte' : 'Recevoir un lien'}
-        </button>
-      </form>
-      {msg && <div className={`notice small ${msg.ok ? 'good' : 'bad'}`} style={{ marginTop: 10 }}>{msg.text}</div>}
     </Section>
   );
 }
@@ -338,7 +254,7 @@ function AiSection() {
 
 function DataSection() {
   const fileRef = useRef<HTMLInputElement>(null);
-  const [backups, setBackups] = useState(listBackups());
+  const [backups, setBackups] = useState(() => listBackups(getScope()));
   const download = () => {
     const blob = exportState(getState());
     const url = URL.createObjectURL(blob);
@@ -350,7 +266,7 @@ function DataSection() {
   };
   return (
     <Section id="donnees" title="Données et sauvegardes">
-      <p className="small">Vos données d’apprentissage sont stockées dans ce navigateur. Exportez-les régulièrement si vous n’utilisez pas de compte.</p>
+      <p className="small">{getScope() === 'guest' ? 'Vos données d’apprentissage sont stockées dans ce navigateur. Exportez-les régulièrement si vous n’utilisez pas de compte.' : 'Votre progression est sauvegardée en ligne automatiquement ; une copie est aussi gardée sur cet appareil. L’export reste possible pour vos archives.'}</p>
       <div className="row">
         <button type="button" className="btn sm" onClick={download}>
           ⬇ Exporter mes données
@@ -372,9 +288,9 @@ function DataSection() {
               return;
             }
             if (!confirm('Remplacer vos données actuelles par ce fichier ? Une sauvegarde des données actuelles sera conservée.')) return;
-            addBackup({ at: new Date().toISOString(), reason: 'Avant import', state: getState() });
-            replaceState({ ...r.state, meta: { ...r.state.meta, dirty: true } });
-            setBackups(listBackups());
+            addBackup(getScope(), { at: new Date().toISOString(), reason: 'Avant import', state: getState() });
+            adopt(r.state);
+            setBackups(listBackups(getScope()));
             toast('Données importées.');
           }}
         />
@@ -395,9 +311,9 @@ function DataSection() {
                 className="btn sm"
                 onClick={() => {
                   if (!confirm('Restaurer cette sauvegarde ? Vos données actuelles seront elles-mêmes sauvegardées.')) return;
-                  addBackup({ at: new Date().toISOString(), reason: 'Avant restauration', state: getState() });
-                  replaceState({ ...b.state, meta: { ...getState().meta, dirty: true } });
-                  setBackups(listBackups());
+                  addBackup(getScope(), { at: new Date().toISOString(), reason: 'Avant restauration', state: getState() });
+                  adopt(b.state);
+                  setBackups(listBackups(getScope()));
                   toast('Sauvegarde restaurée.');
                 }}
               >
@@ -412,7 +328,7 @@ function DataSection() {
           type="button"
           className="btn sm ghost"
           onClick={() => {
-            clearBackups();
+            clearBackups(getScope());
             setBackups([]);
           }}
         >
@@ -427,10 +343,12 @@ function DataSection() {
           className="btn sm danger"
           onClick={() => {
             if (!confirm('Recommencer à zéro ? Une sauvegarde de vos données actuelles sera conservée dans « Sauvegardes ».')) return;
-            addBackup({ at: new Date().toISOString(), reason: 'Avant réinitialisation', state: getState() });
-            replaceState(createInitialState());
-            setBackups(listBackups());
-            toast('Progression réinitialisée.');
+            addBackup(getScope(), { at: new Date().toISOString(), reason: 'Avant réinitialisation', state: getState() });
+            // Connecté : on autorise explicitement le serveur à remplacer la progression en ligne.
+            if (getScope() !== 'guest') requestReset();
+            adopt(createInitialState());
+            setBackups(listBackups(getScope()));
+            toast(getScope() !== 'guest' ? 'Progression réinitialisée (aussi en ligne).' : 'Progression réinitialisée.');
           }}
         >
           Recommencer le parcours
@@ -439,7 +357,11 @@ function DataSection() {
           type="button"
           className="btn sm danger"
           onClick={() => {
-            if (!confirm('Effacer DÉFINITIVEMENT toutes les données de LÉON ACADÉMIE de ce navigateur (sauvegardes comprises) ?')) return;
+            if (getScope() !== 'guest') {
+              toast('Déconnectez-vous d’abord (Mon compte) : vos données en ligne ne sont pas concernées par cette action.', 'error', 8000);
+              return;
+            }
+            if (!confirm('Effacer DÉFINITIVEMENT toutes les données de LÉON ACADÉMIE de ce navigateur (sauvegardes comprises) ? Les progressions déjà sauvegardées en ligne dans un compte ne sont pas supprimées.')) return;
             clearAllLocalData();
             replaceState(createInitialState());
             setBackups([]);

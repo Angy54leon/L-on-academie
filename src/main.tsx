@@ -1,8 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
-import { initAccount } from './state/account';
-import { startAutoSync } from './services/sync';
+import { initSession } from './services/session';
 import { loadVoices } from './services/speech';
 import './styles/global.css';
 
@@ -13,8 +12,7 @@ createRoot(document.getElementById('root')!).render(
 );
 
 // Services facultatifs : sans configuration, ils ne font rien.
-void initAccount();
-startAutoSync();
+void initSession();
 void loadVoices();
 
 // Mode hors ligne (PWA) : uniquement sur la version compilée.

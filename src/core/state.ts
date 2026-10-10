@@ -264,6 +264,8 @@ export const learnerStateSchema = z.object({
     .object({
       lastOpenedDate: z.string().optional(),
       deviceId: z.string().default(''),
+      /** Identifiant du compte auquel appartiennent ces données (absent = mode sans compte). */
+      ownerId: z.string().optional(),
       /** Révision distante au dernier envoi/réception réussi. */
       syncedRevision: z.number().int().optional(),
       lastSyncedAt: iso.optional(),
@@ -277,7 +279,8 @@ export type LearnerState = z.infer<typeof learnerStateSchema>;
 export type Profile = LearnerState['profile'];
 export type Settings = LearnerState['settings'];
 
-export const MAX_ATTEMPTS = 4000;
+// Historique détaillé des réponses conservé (les statistiques quotidiennes, elles, sont gardées sans limite).
+export const MAX_ATTEMPTS = 2500;
 export const MAX_NOTIFICATIONS = 60;
 export const MAX_CONVERSATIONS = 40;
 

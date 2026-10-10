@@ -13,7 +13,9 @@ export const config = {
 };
 
 export function supabaseConfigured(): boolean {
-  return /^https:\/\/.+/.test(config.supabaseUrl) && config.supabaseAnonKey.length > 20;
+  // HTTPS obligatoire, sauf pour un Supabase local de développement (supabase start : http://127.0.0.1:54321).
+  const url = config.supabaseUrl;
+  return (/^https:\/\/.+/.test(url) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(url)) && config.supabaseAnonKey.length > 20;
 }
 
 export function aiEndpoint(): string | null {
