@@ -45,7 +45,7 @@ Sans aucune configuration (mode local gratuit) :
 | **Vocabulaire et répétition espacée** | 273 fiches (mot, traduction, exemple, contexte, prononciation API, audio, niveau, statut). Statuts : nouveau / en cours / fragile / maîtrisé (≥ 3 réussites consécutives et intervalle ≥ 7 jours). Recherche, filtres, révision d’une sélection, cartes ou saisie. |
 | **Erreurs à corriger** | Chaque erreur revient jusqu’à 2 bonnes réponses consécutives. |
 | **Sessions courtes et longues** | Session express (~15 min), révision ciblée, session longue (jour en cours). **Reprise** d’une session interrompue. |
-| **Fonctions vocales** | Écoute (synthèse vocale du navigateur, accent US/UK, vitesse, mode lent), dialogues lus en entier, reconnaissance vocale (Chrome, Edge, Safari), transcription, comparaison au modèle, **s’enregistrer et se réécouter** (audio gardé en mémoire uniquement). |
+| **Fonctions vocales** | Écoute (synthèse vocale du navigateur, accent US/UK, vitesse, mode lent), dialogues lus en entier, reconnaissance vocale (Chrome, Edge, Safari ; détection de compatibilité et messages adaptés à chaque appareil), diagnostic vocal intégré, transcription, comparaison au modèle, **s’enregistrer et se réécouter** (audio gardé en mémoire uniquement). |
 | **Salle de conversation (partenaire local)** | 6 modes (guidé, conversation, immersion, correction, situation réelle, révision), 12 scénarios préparés, correcteur local de 47 règles d’erreurs fréquentes des francophones. **Clairement indiqué comme n’étant pas une IA.** |
 | **Tableau de bord** | Jour en cours, objectifs, temps du jour (temps **actif** uniquement), vocabulaire révisé, compétences, erreurs, progression, prochain exercice recommandé, objectif quotidien modifiable. |
 | **Statistiques** | Graphiques (XP, minutes, bonnes réponses), précision par compétence, vocabulaire, comparaison des évaluations, maîtrise des notions, badges. Vue tableau accessible pour chaque graphique. |
@@ -118,7 +118,20 @@ Ouvrez l’adresse affichée (en général <http://localhost:5173>). C’est tou
 
 **Installer sur téléphone** : ouvrez le site (une fois en ligne, voir §7) dans Chrome (Android) → menu ⋮ → « Installer l’application » ; sur iPhone, Safari → bouton Partager → « Sur l’écran d’accueil ».
 
-**Oral** : la reconnaissance vocale fonctionne dans Chrome, Edge et Safari (pas dans Firefox). Le micro n’est demandé qu’au moment où vous appuyez sur « Parler ». Sinon : réponse écrite ou auto-évaluation.
+**Oral** : le micro n’est demandé qu’au moment où vous appuyez sur « Parler ». Quand la reconnaissance vocale n’est pas disponible, l’application l’explique et propose la réponse écrite ou l’auto-évaluation.
+
+| Appareil / navigateur | Lecture à voix haute | Reconnaissance vocale |
+| --- | --- | --- |
+| Ordinateur : Chrome, Edge | ✅ | ✅ (transcription par Google, Internet nécessaire) |
+| Ordinateur : Safari (Mac) | ✅ | ✅ (transcription par Apple) |
+| Ordinateur : Firefox | ✅ | ❌ (réponse écrite proposée) |
+| iPad / iPhone : **Safari** | ✅ (après un premier toucher) | ✅ si la **Dictée** est activée (Réglages › Général › Clavier) |
+| iPad / iPhone : Chrome, Firefox, Edge… | ✅ | ❌ sur la plupart des versions : ouvrir dans Safari |
+| Android : Chrome | ✅ | ✅ (services vocaux Google nécessaires) |
+| Android : Samsung Internet | ✅ | ⚠️ peu fiable : préférer Chrome |
+| Navigateurs intégrés (Facebook, Instagram, Messenger, TikTok…) | variable | ❌ le plus souvent : ouvrir dans Chrome ou Safari |
+
+Ce tableau résume la documentation des navigateurs et les comportements gérés par l’application ; il n’a pas été vérifié sur chaque appareil réel. En cas de problème : **Paramètres › Voix et audio › Diagnostic vocal** affiche ce que l’appareil permet, teste la lecture, la reconnaissance et le micro, et produit un rapport à copier.
 
 ---
 
@@ -317,6 +330,7 @@ Les tests vérifient notamment :
 - **la correction** : variantes, contractions, fautes de frappe vs erreurs de grammaire, pièges, oral, écriture, détecteur d’erreurs (sans fausses alertes sur des phrases correctes) ;
 - **l’apprentissage** : répétition espacée (jamais « maîtrisé » après une seule réponse), enregistrement des réponses, déblocage, remédiation, séries, adaptation, évaluations, conseil d’extension, badges, défis, notifications, validation des données ;
 - **la restauration à la connexion** : la base en ligne prime, jamais de remplacement par une copie vide, envoi des modifications non sauvegardées, fusion quand les deux versions ont changé, copie d’un autre compte ignorée, transfert des données sans compte, choix demandé quand les deux ont une progression ; cœur du professeur IA (validation, prompt côté serveur, limitation) ;
+- **les fonctions vocales** (moteur de reconnaissance simulé) : détection iPad/iPhone, Android, navigateurs intégrés, Firefox, page non sécurisée ; comportement de Safari sans résultat « final », résultats répétés de Chrome Android, micro refusé, micro qui ne s’ouvre jamais, fin sans parole, arrêt sans événement de fin, double lancement, annulation ;
 - **la sécurité de la base Supabase** dans une vraie base Postgres embarquée (PGlite), avec les deux migrations : isolation des données, contrôle de concurrence, refus de remplacer une progression par du vide (sauf remise à zéro volontaire), refus sans connexion, groupes réservés aux membres, statistiques masquées tant qu’elles ne sont pas partagées, quota IA, suppression des données.
 
 Des tests de bout en bout dans un navigateur (Chromium/Playwright) ont aussi été réalisés pendant le développement ; ils ne font pas partie de `npm test` :
@@ -329,7 +343,7 @@ Des tests de bout en bout dans un navigateur (Chromium/Playwright) ont aussi ét
 ## 11. Confidentialité et sécurité
 
 - **Mode local** : toutes les données restent dans votre navigateur. Rien n’est envoyé ailleurs.
-- **Voix** : LÉON ACADÉMIE n’enregistre ni ne conserve votre voix. La reconnaissance vocale est réalisée par le navigateur (dans **Chrome, l’audio est transmis à un service de Google** pour la transcription ; l’application l’indique avant la première utilisation). La fonction « s’enregistrer » garde l’audio en mémoire uniquement.
+- **Voix** : LÉON ACADÉMIE n’enregistre ni ne conserve votre voix. La reconnaissance vocale est réalisée par le navigateur (dans **Chrome et Edge, l’audio est transmis à un service de Google**, dans Safari à Apple, pour la transcription ; l’application l’indique avant la première utilisation). La fonction « s’enregistrer » garde l’audio en mémoire uniquement.
 - **Secrets** : aucune clé secrète dans le code ni dans le dépôt. La clé du modèle d’IA reste côté serveur. `.env` est ignoré par Git.
 - **Base distante** : RLS sur toutes les tables ; chacun ne lit que ses données ; les membres d’un groupe ne voient que le pseudo des autres et les statistiques que chacun a choisi de partager (rien par défaut).
 - **Mots de passe** : jamais stockés ni journalisés par l’application ; ils sont transmis uniquement à Supabase Auth (HTTPS), qui les stocke hachés (bcrypt).
@@ -340,7 +354,7 @@ Des tests de bout en bout dans un navigateur (Chromium/Playwright) ont aussi ét
 ## 12. Limites connues
 
 - **Prononciation** : l’application compare la **transcription** de la reconnaissance vocale au texte attendu. Une transcription correcte ne prouve pas une prononciation excellente ; il n’y a pas d’analyse phonétique fine.
-- **Reconnaissance vocale** : indisponible dans Firefox ; nécessite Internet dans Chrome. Solution de remplacement : réponse écrite ou auto-évaluation.
+- **Reconnaissance vocale** : fournie par le navigateur, donc indisponible dans Firefox, dans les navigateurs intégrés aux applications et dans la plupart des navigateurs autres que Safari sur iPad/iPhone ; nécessite Internet dans Chrome. Solution de remplacement : réponse écrite ou auto-évaluation. Une reconnaissance 100 % locale (modèle Whisper exécuté dans le navigateur) serait possible sans service payant, mais au prix d’un téléchargement d’environ 40 Mo par appareil et d’une reconnaissance plus lente sur tablette : elle n’est pas intégrée pour l’instant.
 - **Correcteur local** : il repère une liste de 47 règles d’erreurs fréquentes des francophones, pas toutes les erreurs. L’expression écrite est estimée automatiquement (longueur, mots attendus, erreurs repérées) : c’est une indication, pas la note d’un correcteur humain.
 - **Professeur IA** : les réponses d’un modèle peuvent contenir des erreurs ; la qualité dépend du modèle choisi ; les offres gratuites ont des quotas.
 - **Classements** : ils reposent sur les progrès enregistrés par l’appareil de chaque membre ; un utilisateur techniquement averti pourrait les falsifier (pas de correction côté serveur).

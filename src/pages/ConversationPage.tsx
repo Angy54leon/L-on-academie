@@ -8,7 +8,7 @@ import { cardStatus } from '../core/srs';
 import { normalizeAnswer, tokenize } from '../core/normalize';
 import { randomId, type ConversationLog, type ConversationMessage } from '../core/state';
 import { askTeacher, checkAi, type AiStatus } from '../services/ai';
-import { speak, startRecognition, sttSupported, type RecognitionHandle } from '../services/speech';
+import { speak, startRecognition, sttAvailability, type RecognitionHandle } from '../services/speech';
 import { getWord } from '../content';
 import { useStudyTimer } from '../components/useStudyTimer';
 import { Listen, PageHead, Segmented, useOnline } from '../components/ui';
@@ -56,7 +56,11 @@ export default function ConversationPage() {
   const [showFrFor, setShowFrFor] = useState<Set<number>>(new Set());
   const [autoPlay, setAutoPlay] = useState(false);
   const [listening, setListening] = useState(false);
+  const [micPhase, setMicPhase] = useState<'starting' | 'listening' | null>(null);
+  const [stt] = useState(() => sttAvailability());
   const rec = useRef<RecognitionHandle | null>(null);
+  // Quitter la page coupe le micro (sinon il resterait ouvert en arrière-plan).
+  useEffect(() => () => rec.current?.abort(), []);
   const endRef = useRef<HTMLDivElement>(null);
   useStudyTimer(!!conv);
   const immersion = immersionLevel(state);
@@ -251,24 +255,36 @@ export default function ConversationPage() {
 
   const mic = () => {
     if (listening) {
-      rec.current?.stop();
+      if (micPhase === 'starting') rec.current?.abort();
+      else rec.current?.stop();
       return;
     }
     setError('');
     setListening(true);
+    setMicPhase('starting');
     rec.current = startRecognition(state.settings.accent, {
+      onStart: () => setMicPhase('listening'),
       onInterim: (t) => setText(t),
       onResult: (t) => {
         setText(t);
         setListening(false);
+        setMicPhase(null);
       },
       onError: (m) => {
         setError(m);
         setListening(false);
+        setMicPhase(null);
       },
-      onEnd: () => setListening(false),
+      onEnd: () => {
+        rec.current = null;
+        setListening(false);
+        setMicPhase(null);
+      },
     });
-    if (!rec.current) setListening(false);
+    if (!rec.current) {
+      setListening(false);
+      setMicPhase(null);
+    }
   };
 
   const currentStep = conv && conv.source === 'local' && scenario && conv.scenarioId ? scenario.steps[step] : undefined;
@@ -415,7 +431,9 @@ export default function ConversationPage() {
                   )}
                 </div>
               )}
-              {error && <div className="notice bad small" style={{ marginBottom: 8 }}>{error}</div>}
+              {error && <div className="notice bad small" style={{ marginBottom: 8 }} role="alert">{error}</div>}
+              {micPhase === 'listening' && !text && <div className="small muted" aria-live="polite" style={{ marginBottom: 6 }}>🔴 Je vous écoute… parlez en anglais.</div>}
+              {!stt.ok && conv && <div className="tiny muted" style={{ marginBottom: 6 }}>🎙️ Dictée vocale indisponible : {stt.reason}</div>}
               <div className="row" style={{ flexWrap: 'nowrap', alignItems: 'flex-end' }}>
                 <textarea
                   value={text}
@@ -432,9 +450,15 @@ export default function ConversationPage() {
                   aria-label="Votre message"
                   maxLength={1200}
                 />
-                {sttSupported() && (
-                  <button type="button" className={`btn icon ${listening ? 'recording' : ''}`} onClick={mic} aria-label={listening ? 'Arrêter le micro' : 'Dicter au micro'} title="Le micro est demandé à ce moment-là. Dans Chrome, la transcription passe par un service de Google.">
-                    {listening ? '⏹' : '🎙️'}
+                {stt.ok && (
+                  <button
+                    type="button"
+                    className={`btn icon ${micPhase === 'listening' ? 'recording' : ''}`}
+                    onClick={mic}
+                    aria-label={micPhase === 'listening' ? 'Arrêter le micro' : micPhase === 'starting' ? 'Ouverture du micro, toucher pour annuler' : 'Dicter au micro'}
+                    title={stt.warning ?? 'Le micro est demandé à ce moment-là. La transcription est réalisée par le navigateur (Google dans Chrome, Apple dans Safari).'}
+                  >
+                    {micPhase === 'listening' ? '⏹' : micPhase === 'starting' ? '⏳' : '🎙️'}
                   </button>
                 )}
                 <button type="button" className="btn primary" onClick={() => void send()} disabled={!text.trim() || busy}>

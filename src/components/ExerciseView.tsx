@@ -4,7 +4,7 @@ import type { Item } from '../content';
 import { checkAnswer, errorKindLabel, keywordsFound, analyzeWriting, type CheckResult, type Response } from '../core/answerCheck';
 import { seededRandom, shuffle } from '../core/adaptive';
 import { askTeacher, checkAi, type TeacherResponse } from '../services/ai';
-import { recorderSupported, speak, startRecognition, startRecording, sttSupported, ttsSupported, type RecognitionHandle, type Recording } from '../services/speech';
+import { micDeniedHelp, micPermission, recorderSupported, recordingErrorMessage, speak, startRecognition, startRecording, sttAvailability, ttsSupported, type RecognitionHandle, type Recording } from '../services/speech';
 import { useLearner } from '../state/store';
 import { Listen } from './ui';
 
@@ -404,37 +404,58 @@ let micNoticeShown = false;
 
 function SpeakBody({ item, disabled, onSubmit, immersion, voiceOnly }: BodyProps & { item: Extract<Item, { type: 'speak' }> }) {
   const s = useLearner().settings;
-  const [listening, setListening] = useState(false);
+  const [stt] = useState(() => sttAvailability());
+  // idle → starting (micro en cours d'ouverture) → listening (on peut parler)
+  const [phase, setPhase] = useState<'idle' | 'starting' | 'listening'>('idle');
   const [interim, setInterim] = useState('');
   const [error, setError] = useState('');
   const [typed, setTyped] = useState('');
-  const [mode, setMode] = useState<'voice' | 'type' | 'self'>(sttSupported() ? 'voice' : 'type');
+  const [mode, setMode] = useState<'voice' | 'type' | 'self'>(stt.ok ? 'voice' : 'type');
+  const [micDenied, setMicDenied] = useState(false);
   const [showNotice] = useState(() => {
     const v = !micNoticeShown;
     micNoticeShown = true;
     return v;
   });
   const handle = useRef<RecognitionHandle | null>(null);
-  useEffect(() => () => handle.current?.abort(), []);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    // On regarde seulement si le micro a déjà été refusé (sans le demander).
+    if (stt.ok) void micPermission().then((p) => mounted.current && setMicDenied(p === 'denied'));
+    return () => {
+      mounted.current = false;
+      handle.current?.abort();
+    };
+  }, [stt.ok]);
   const isQuestion = !!item.question;
+  const busy = phase !== 'idle';
 
   const start = () => {
+    if (busy) return; // pas de double lancement
     setError('');
     setInterim('');
-    setListening(true);
+    setPhase('starting');
     handle.current = startRecognition(s.accent, {
-      onInterim: setInterim,
+      onStart: () => mounted.current && setPhase('listening'),
+      onInterim: (t) => mounted.current && setInterim(t),
       onResult: (text, confidence) => {
-        setListening(false);
+        if (!mounted.current) return;
+        setPhase('idle');
         onSubmit({ kind: 'speech', transcript: text, confidence }, text);
       },
-      onError: (m) => {
-        setListening(false);
+      onError: (m, code) => {
+        if (!mounted.current) return;
+        setPhase('idle');
         setError(m);
+        if (code === 'not-allowed') setMicDenied(true);
       },
-      onEnd: () => setListening(false),
+      onEnd: () => {
+        handle.current = null;
+        if (mounted.current) setPhase('idle');
+      },
     });
-    if (!handle.current) setListening(false);
+    if (!handle.current) setPhase('idle');
   };
 
   return (
@@ -460,7 +481,7 @@ function SpeakBody({ item, disabled, onSubmit, immersion, voiceOnly }: BodyProps
       {!disabled && (
         <>
           {!voiceOnly && (<div className="segmented" style={{ margin: '14px 0' }} role="group" aria-label="Mode de réponse">
-            <button type="button" aria-pressed={mode === 'voice'} onClick={() => setMode('voice')} disabled={!sttSupported()}>
+            <button type="button" aria-pressed={mode === 'voice'} onClick={() => setMode('voice')} disabled={!stt.ok}>
               🎙️ Parler
             </button>
             <button type="button" aria-pressed={mode === 'type'} onClick={() => setMode('type')}>
@@ -472,20 +493,27 @@ function SpeakBody({ item, disabled, onSubmit, immersion, voiceOnly }: BodyProps
               </button>
             )}
           </div>)}
-          {!sttSupported() && <div className="notice warn small">La reconnaissance vocale n’est pas disponible dans ce navigateur (essayez Chrome, Edge ou Safari). Vous pouvez écrire votre réponse ou vous auto-évaluer.</div>}
+          {!stt.ok && <div className="notice warn small">{stt.reason} Vous pouvez écrire votre réponse{isQuestion ? '' : ' ou vous auto-évaluer'}.</div>}
 
-          {mode === 'voice' && sttSupported() && (
+          {mode === 'voice' && stt.ok && (
             <div>
               {showNotice && (
                 <p className="tiny muted">
-                  🔒 Le micro est demandé seulement quand vous appuyez sur « Parler ». La transcription est réalisée par votre navigateur (dans Chrome, par un service de Google). LÉON ACADÉMIE ne conserve aucun enregistrement audio.
+                  🔒 Le micro est demandé seulement quand vous appuyez sur « Parler » (une seule fois si vous l’autorisez). La transcription est réalisée par votre navigateur : par Google dans Chrome et Edge, par Apple dans Safari. LÉON ACADÉMIE ne conserve aucun enregistrement audio.
                 </p>
               )}
-              <button type="button" className={`btn ${listening ? 'recording' : 'primary'}`} onClick={() => (listening ? handle.current?.stop() : start())}>
-                {listening ? '⏹ Arrêter' : '🎙️ Parler'}
+              {stt.warning && <div className="notice warn small" style={{ marginBottom: 8 }}>{stt.warning}</div>}
+              {micDenied && !error && <div className="notice warn small" style={{ marginBottom: 8 }}>{micDeniedHelp()}</div>}
+              <button
+                type="button"
+                className={`btn ${phase === 'listening' ? 'recording' : 'primary'}`}
+                onClick={() => (phase === 'listening' ? handle.current?.stop() : phase === 'starting' ? handle.current?.abort() : start())}
+                aria-live="polite"
+              >
+                {phase === 'listening' ? '⏹ J’ai fini' : phase === 'starting' ? '⏳ Ouverture du micro… (annuler)' : '🎙️ Parler'}
               </button>
               <div className="mic-live" aria-live="polite" style={{ marginTop: 8 }}>
-                {interim}
+                {phase === 'listening' && !interim ? <span className="muted">🔴 Je vous écoute… parlez maintenant.</span> : interim}
               </div>
             </div>
           )}
@@ -505,7 +533,18 @@ function SpeakBody({ item, disabled, onSubmit, immersion, voiceOnly }: BodyProps
             </form>
           )}
           {mode === 'self' && <SelfEval onSubmit={onSubmit} />}
-          {error && <div className="notice bad small" style={{ marginTop: 8 }}>{error}</div>}
+          {error && (
+            <div className="notice bad small" style={{ marginTop: 8 }} role="alert">
+              {error}
+              {mode === 'voice' && (
+                <div style={{ marginTop: 6 }}>
+                  <button type="button" className="btn sm" onClick={() => setMode('type')}>
+                    ⌨️ Répondre par écrit
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           {recorderSupported() && mode !== 'self' && <SelfRecorder />}
         </>
       )}
@@ -538,8 +577,8 @@ function SelfRecorder() {
                 if (url) URL.revokeObjectURL(url);
                 setUrl(null);
                 setRec(await startRecording());
-              } catch {
-                setErr('Micro indisponible ou refusé.');
+              } catch (e) {
+                setErr(recordingErrorMessage(e));
               }
             }}
           >

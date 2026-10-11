@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { initSession } from './services/session';
-import { loadVoices } from './services/speech';
+import { loadVoices, unlockSpeechOnFirstGesture } from './services/speech';
 import './styles/global.css';
 
 createRoot(document.getElementById('root')!).render(
@@ -14,6 +14,7 @@ createRoot(document.getElementById('root')!).render(
 // Services facultatifs : sans configuration, ils ne font rien.
 void initSession();
 void loadVoices();
+unlockSpeechOnFirstGesture();
 
 // Mode hors ligne (PWA) : uniquement sur la version compilée.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {

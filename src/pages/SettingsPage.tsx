@@ -7,6 +7,7 @@ import { checkAi, type AiStatus } from '../services/ai';
 import { requestReset, useSaveState } from '../services/autosave';
 import { supabaseConfigured } from '../services/config';
 import { loadVoices, recorderSupported, speak, sttSupported, ttsSupported, type VoiceInfo } from '../services/speech';
+import { VoiceDiagnostics } from '../components/VoiceDiagnostics';
 import { addBackup, clearAllLocalData, clearBackups, exportState, importState, listBackups } from '../services/storage';
 import { formatMinutes, PageHead, toast } from '../components/ui';
 import { useAccount } from '../state/account';
@@ -136,7 +137,7 @@ export default function SettingsPage() {
           LÉON ACADÉMIE — version 1.0. Les niveaux affichés (A1 à C1) sont des estimations pédagogiques inspirées du CECRL, pas une certification officielle. Aucun niveau bilingue n’est garanti en 14 ou 24 jours : l’application mesure vos progrès réels.
         </p>
         <p className="small muted">
-          Fonctions de ce navigateur : synthèse vocale {ttsSupported() ? '✅' : '❌'} · reconnaissance vocale {sttSupported() ? '✅' : '❌'} · enregistrement {recorderSupported() ? '✅' : '❌'}
+          Fonctions de ce navigateur : synthèse vocale {ttsSupported() ? '✅' : '❌'} · reconnaissance vocale {sttSupported() ? '✅' : '❌'} · enregistrement {recorderSupported() ? '✅' : '❌'} — détails dans « Voix et audio › Diagnostic vocal ».
         </p>
       </Section>
     </div>
@@ -184,6 +185,10 @@ function VoiceSection() {
       <p className="small muted" style={{ marginTop: 8 }}>
         Astuce : les voix « naturelles » (Edge, Chrome, Safari) sont les plus claires. Les voix marquées « en ligne » nécessitent Internet.
       </p>
+      <details style={{ marginTop: 12 }} id="diagnostic-vocal">
+        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>🩺 Diagnostic vocal (si la voix ou le micro ne marchent pas)</summary>
+        <VoiceDiagnostics />
+      </details>
     </Section>
   );
 }

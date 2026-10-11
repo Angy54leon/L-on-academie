@@ -7,7 +7,7 @@ import { levelFor, scoreAssessment } from '../core/assessment';
 import { recordAttempt, saveAssessment, saveSession } from '../core/learner';
 import { isDayDone, lastAssessment } from '../core/progress';
 import { randomId } from '../core/state';
-import { sttSupported } from '../services/speech';
+import { sttAvailability } from '../services/speech';
 import { HBarChart } from '../components/charts';
 import { PassageView } from '../components/ContentViews';
 import { ExerciseView } from '../components/ExerciseView';
@@ -35,7 +35,8 @@ export function AssessmentPage() {
 
   const index = sessionMatches ? state.session!.index : 0;
   const item = form.items[index];
-  const stt = useMemo(() => sttSupported(), []);
+  const sttInfo = useMemo(() => sttAvailability(), []);
+  const stt = sttInfo.ok;
 
   if (!valid) return <Navigate to="/" replace />;
   if (!state.profile.onboarded) return <Navigate to="/bienvenue" replace />;
@@ -188,7 +189,7 @@ export function AssessmentPage() {
         {item.type === 'speak' && !stt ? (
           <div>
             <p>Question orale : « {item.question ?? item.text} »</p>
-            <div className="notice warn">La reconnaissance vocale n’est pas disponible dans ce navigateur. Cette question sera marquée « non évaluée » (elle ne compte ni pour ni contre vous).</div>
+            <div className="notice warn">{sttInfo.reason} Cette question sera marquée « non évaluée » (elle ne compte ni pour ni contre vous).</div>
             <button type="button" className="btn primary" style={{ marginTop: 12 }} onClick={skipSpeaking}>
               Continuer →
             </button>
