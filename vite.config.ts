@@ -51,7 +51,10 @@ function devTeacherApi(env: Record<string, string>): Plugin {
           );
           return send(res, 200, reply);
         } catch (e) {
-          if (e instanceof TeacherError) return send(res, e.status, { error: e.message });
+          if (e instanceof TeacherError) {
+            console.error(`[professeur IA] ${e.code} (${e.status})`); // journal technique, sans contenu
+            return send(res, e.status, { error: e.message });
+          }
           return send(res, 400, { error: 'Requête invalide.' });
         }
       });

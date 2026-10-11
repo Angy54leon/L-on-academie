@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { SCENARIOS, conceptLabel, type Scenario } from '../content';
 import { immersionLevel } from '../core/adaptive';
-import { correctSentence, evaluateReply, reviewPrompts, usesWord, type ReviewPrompt } from '../core/localPartner';
-import { recordConceptSignal, recordConversationTurn, reviewVocab, saveConversation } from '../core/learner';
-import { lastAssessment, today, weakConcepts } from '../core/progress';
+import { correctSentence, evaluateReply, retryPrompt, reviewPrompts, usesWord, type ReviewPrompt } from '../core/localPartner';
+import { awaitingTeacher, buildTeacherHistory, CONVERSATION_TOPICS, latestObservation, pickTopic, referenceLevel, SURPRISE, type Topic } from '../core/conversation';
+import { recordAiCall, recordConceptSignal, recordConversationTurn, reviewVocab, saveConversation } from '../core/learner';
+import { today, weakConcepts } from '../core/progress';
 import { cardStatus } from '../core/srs';
 import { normalizeAnswer, tokenize } from '../core/normalize';
 import { randomId, type ConversationLog, type ConversationMessage } from '../core/state';
-import { askTeacher, checkAi, type AiStatus } from '../services/ai';
+import { AiError, askTeacher, checkAi, type AiStatus } from '../services/ai';
 import { speak, startRecognition, sttAvailability, type RecognitionHandle } from '../services/speech';
 import { getWord } from '../content';
 import { useStudyTimer } from '../components/useStudyTimer';
@@ -26,8 +27,6 @@ const MODES: { id: Mode; label: string; desc: string }[] = [
   { id: 'review', label: 'Révision', desc: 'Réutilisez les mots et notions que vous maîtrisez mal.' },
 ];
 
-const TOPICS = ['Daily life', 'Hobbies and free time', 'Travel', 'Work and career', 'Plans and projects', 'Food and cooking', 'Films and series', 'Technology and society', 'Relationships and friends', 'Health and sport'];
-
 function now() {
   return new Date().toISOString();
 }
@@ -45,7 +44,8 @@ export default function ConversationPage() {
   const [engine, setEngine] = useState<Engine>('local');
   const [mode, setMode] = useState<Mode>('conversation');
   const [scenarioId, setScenarioId] = useState<string>(scenariosFor('conversation')[0].id);
-  const [topic, setTopic] = useState(TOPICS[0]);
+  const [topic, setTopic] = useState<string>(SURPRISE);
+  const [activeTopic, setActiveTopic] = useState<Topic | null>(null);
   const [conv, setConv] = useState<ConversationLog | null>(null);
   const [step, setStep] = useState(0);
   const [tries, setTries] = useState(0);
@@ -53,6 +53,12 @@ export default function ConversationPage() {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  /** La dernière demande au professeur IA a échoué : le message de l'apprenant est conservé, on peut réessayer. */
+  const [failed, setFailed] = useState(false);
+  const sendingRef = useRef(false); // anti double envoi (plus rapide qu'un état React)
+  const abortRef = useRef<AbortController | null>(null);
+  const convIdRef = useRef<string | null>(null);
+  useEffect(() => () => abortRef.current?.abort(), []);
   const [showFrFor, setShowFrFor] = useState<Set<number>>(new Set());
   const [autoPlay, setAutoPlay] = useState(false);
   const [listening, setListening] = useState(false);
@@ -64,7 +70,7 @@ export default function ConversationPage() {
   const endRef = useRef<HTMLDivElement>(null);
   useStudyTimer(!!conv);
   const immersion = immersionLevel(state);
-  const level = lastAssessment(state, 'placement')?.level ?? 'A2';
+  const level = referenceLevel(state);
 
   useEffect(() => {
     void checkAi(true).then((s) => {
@@ -79,8 +85,21 @@ export default function ConversationPage() {
   const options = scenariosFor(mode);
 
   const persist = (c: ConversationLog) => {
+    convIdRef.current = c.id;
     setConv(c);
     update((s) => saveConversation(s, c), { silent: false });
+  };
+
+  /** Ferme la conversation en cours (et annule une demande au professeur en attente). */
+  const closeConversation = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    convIdRef.current = null;
+    sendingRef.current = false;
+    setBusy(false);
+    setFailed(false);
+    setError('');
+    setConv(null);
   };
 
   const addMessages = (c: ConversationLog, msgs: ConversationMessage[]): ConversationLog => ({ ...c, messages: [...c.messages, ...msgs], updatedAt: now() });
@@ -91,14 +110,18 @@ export default function ConversationPage() {
   };
 
   const startConversation = () => {
+    abortRef.current?.abort();
     setError('');
+    setFailed(false);
     setStep(0);
     setTries(0);
+    const chosen = pickTopic(topic);
+    setActiveTopic(chosen);
     const base: ConversationLog = {
       id: randomId('conv'),
       mode,
       source: engine,
-      title: engine === 'ai' ? `${MODES.find((m) => m.id === mode)!.label} · ${mode === 'situation' ? scenario?.title : topic}` : `${MODES.find((m) => m.id === mode)!.label} · ${mode === 'correction' ? 'Correction' : mode === 'review' ? 'Révision' : scenario?.title}`,
+      title: engine === 'ai' ? `${MODES.find((m) => m.id === mode)!.label} · ${mode === 'situation' ? scenario?.title : mode === 'correction' ? 'Correction' : mode === 'review' ? 'Révision' : chosen.fr}` : `${MODES.find((m) => m.id === mode)!.label} · ${mode === 'correction' ? 'Correction' : mode === 'review' ? 'Révision' : scenario?.title}`,
       startedAt: now(),
       updatedAt: now(),
       scenarioId: mode === 'correction' || mode === 'review' ? undefined : scenarioId,
@@ -108,13 +131,16 @@ export default function ConversationPage() {
     if (engine === 'ai') {
       const hint =
         mode === 'situation' && scenario
-          ? `Jeu de rôle avec le professeur IA : ${scenario.setting} Il jouera « ${scenario.role} ». Écrivez votre première réplique (ex. : « ${scenario.steps[0].sample} »).`
+          ? `Jeu de rôle avec le professeur IA : ${scenario.setting} Léon joue « ${scenario.role} » et commence.`
           : mode === 'correction'
-            ? 'Écrivez une phrase ou un court texte en anglais : le professeur IA le corrigera.'
+            ? 'Mode correction : Léon va vous inviter à écrire des phrases en anglais, puis les corrigera.'
             : mode === 'review'
-              ? 'Le professeur IA va vous faire réutiliser vos mots fragiles. Écrivez « Hi! Let’s review. » pour commencer.'
-              : `Sujet : ${topic}. Écrivez votre premier message en anglais pour lancer la conversation.`;
-      first = [{ role: 'system', text: hint, at: now() }];
+              ? 'Révision : Léon va discuter avec vous en vous faisant réutiliser vos mots fragiles.'
+              : `Sujet de départ : ${chosen.fr}. Léon lance la conversation ; répondez en anglais, à l’écrit ou au micro. La discussion peut ensuite changer de sujet.`;
+      const opened = addMessages(base, [{ role: 'system', text: hint, at: now() }]);
+      persist(opened);
+      void requestReply(opened, chosen);
+      return;
     } else if (mode === 'correction') {
       first = [{ role: 'system', text: 'Mode correction (correcteur local à règles) : écrivez une phrase en anglais. Le correcteur repère les erreurs fréquentes des francophones — pas toutes les erreurs.', at: now() }];
     } else if (mode === 'review') {
@@ -141,50 +167,101 @@ export default function ConversationPage() {
 
   const send = async () => {
     const content = text.trim();
-    if (!content || !conv || busy) return;
+    if (!content || !conv || busy || sendingRef.current) return;
+    sendingRef.current = true;
+    try {
+      await sendContent(conv, content);
+    } finally {
+      sendingRef.current = false;
+    }
+  };
+
+  /**
+   * Demande une réponse au professeur IA pour la conversation `c` (dont la dernière réplique est celle de
+   * l'apprenant, ou aucune réplique pour l'ouverture). Ne duplique jamais le message de l'apprenant :
+   * en cas d'échec, il reste affiché et « Réessayer » relance la même demande.
+   */
+  const requestReply = async (c: ConversationLog, topicOverride?: Topic) => {
+    const waiting = awaitingTeacher(c.messages);
+    if (!waiting) return;
+    const s = getState();
+    if (today(s, new Date()).aiCalls >= s.settings.aiDailyLimit) {
+      setError(`Limite quotidienne d’échanges avec l’IA atteinte (${s.settings.aiDailyLimit}). Vous pouvez la modifier dans les paramètres, ou continuer avec le partenaire local.`);
+      setFailed(true);
+      return;
+    }
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setBusy(true);
+    setFailed(false);
+    setError('');
+    try {
+      const weakWords = Object.values(s.vocab)
+        .filter((v) => cardStatus(v) === 'fragile' || cardStatus(v) === 'learning')
+        .slice(0, 10)
+        .map((v) => getWord(v.id)?.en)
+        .filter((x): x is string => !!x);
+      const history = buildTeacherHistory(c.messages);
+      const t = topicOverride ?? activeTopic;
+      const r = await askTeacher(
+        {
+          mode: c.mode,
+          level,
+          immersion: c.mode === 'immersion' ? 3 : immersion,
+          topic: c.mode === 'situation' ? undefined : t?.en,
+          scenario: c.mode === 'situation' && scenario ? `${scenario.role} — ${scenario.title}. ${scenario.setting}` : undefined,
+          weakWords,
+          weakConcepts: weakConcepts(s, 5).map(conceptLabel),
+          opening: waiting === 'opening' || undefined,
+          memory: history.memory.length ? history.memory : undefined,
+          messages: history.messages,
+        },
+        { signal: controller.signal },
+      );
+      // Conversation fermée ou remplacée entre-temps : on n'ajoute rien.
+      if (controller.signal.aborted || convIdRef.current !== c.id) return;
+      const reply = teacherSay({
+        role: 'teacher',
+        text: r.reply,
+        fr: r.replyFr,
+        at: now(),
+        corrections: r.corrections?.length ? r.corrections : undefined,
+        betterVersion: r.betterVersion,
+        tipFr: r.tipFr,
+        levelHint: r.levelHint,
+        focusFr: r.focusFr,
+      });
+      persist(addMessages(c, [reply]));
+      if (waiting === 'reply') {
+        const lastLearner = [...c.messages].reverse().find((m) => m.role === 'learner')?.text ?? '';
+        recordTurn(lastLearner, true, correctSentence(lastLearner).issues.filter((i) => i.kind === 'error').map((i) => i.concept));
+      } else update((st, n) => recordAiCall(st, n));
+    } catch (e) {
+      if (controller.signal.aborted && !(e instanceof AiError && e.retryable)) return; // annulée volontairement
+      if (convIdRef.current !== c.id) return;
+      const message = e instanceof Error ? e.message : 'Erreur inconnue.';
+      // Journal technique (sans contenu de conversation).
+      console.warn('[conversation] réponse du professeur IA impossible :', e instanceof AiError ? `${e.status || 'réseau'} ${e.retryable ? '(réessayable)' : ''}` : 'erreur');
+      setError(message);
+      setFailed(true);
+    } finally {
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+        setBusy(false);
+      }
+    }
+  };
+
+  const sendContent = async (conv: ConversationLog, content: string) => {
     setText('');
     setError('');
     const learnerMsg: ConversationMessage = { role: 'learner', text: content, at: now() };
     let c = addMessages(conv, [learnerMsg]);
 
     if (conv.source === 'ai') {
-      const todayCalls = today(getState(), new Date()).aiCalls;
-      if (todayCalls >= getState().settings.aiDailyLimit) {
-        setError(`Limite quotidienne d’échanges avec l’IA atteinte (${getState().settings.aiDailyLimit}). Vous pouvez la modifier dans les paramètres, ou continuer avec le partenaire local.`);
-        setText(content);
-        return;
-      }
       persist(c);
-      setBusy(true);
-      try {
-        const s = getState();
-        const weakWords = Object.values(s.vocab)
-          .filter((v) => cardStatus(v) === 'fragile' || cardStatus(v) === 'learning')
-          .slice(0, 10)
-          .map((v) => getWord(v.id)?.en)
-          .filter((x): x is string => !!x);
-        const r = await askTeacher({
-          mode: conv.mode,
-          level,
-          immersion,
-          topic: conv.mode === 'situation' ? undefined : topic,
-          scenario: conv.mode === 'situation' && scenario ? `${scenario.role} — ${scenario.title}` : undefined,
-          weakWords,
-          weakConcepts: weakConcepts(s, 5).map(conceptLabel),
-          messages: c.messages
-            .filter((m) => m.role !== 'system')
-            .slice(-14)
-            .map((m) => ({ role: m.role === 'learner' ? ('user' as const) : ('assistant' as const), content: m.text })),
-        });
-        c = addMessages(c, [teacherSay({ role: 'teacher', text: r.reply, at: now(), corrections: r.corrections, betterVersion: r.betterVersion, tipFr: r.tipFr })]);
-        persist(c);
-        const local = correctSentence(content).issues.filter((i) => i.kind === 'error').map((i) => i.concept);
-        recordTurn(content, true, local);
-      } catch (e) {
-        setError(`${e instanceof Error ? e.message : 'Erreur'} — vous pouvez réessayer ou passer au partenaire local.`);
-      } finally {
-        setBusy(false);
-      }
+      await requestReply(c);
       return;
     }
 
@@ -225,9 +302,13 @@ export default function ConversationPage() {
       return;
     }
 
-    if (!scenario) return;
-    const st = scenario.steps[step];
-    if (!st) return;
+    const st = scenario?.steps[step];
+    if (!scenario || !st) {
+      // Ne jamais faire disparaître un message sans explication.
+      setText(content);
+      setError('Ce scénario est terminé. Recommencez-le ou choisissez-en un autre pour continuer.');
+      return;
+    }
     const fb = evaluateReply(st, content);
     const feedbackMsg: ConversationMessage = {
       role: 'system',
@@ -245,7 +326,9 @@ export default function ConversationPage() {
       setStep(step + 1);
       setTries(0);
     } else {
-      out.push({ role: 'system', text: 'Essayez de reformuler (ou utilisez l’aide), puis renvoyez votre réponse.', at: now() });
+      // Le partenaire relance toujours la conversation (au lieu de rester muet).
+      const again = retryPrompt(st, fb);
+      out.push(teacherSay({ role: 'teacher', text: again.text, fr: again.fr, at: now() }));
       setTries(tries + 1);
     }
     c = addMessages(c, out);
@@ -359,10 +442,14 @@ export default function ConversationPage() {
             <label className="field" style={{ marginTop: 16 }}>
               <span>Sujet</span>
               <select value={topic} onChange={(e) => setTopic(e.target.value)}>
-                {TOPICS.map((t) => (
-                  <option key={t}>{t}</option>
+                <option value={SURPRISE}>🎲 Surprise (sujet au hasard)</option>
+                {CONVERSATION_TOPICS.map((t) => (
+                  <option key={t.en} value={t.en}>
+                    {t.fr}
+                  </option>
                 ))}
               </select>
+              <span className="tiny muted" style={{ fontWeight: 400 }}>Léon lance la discussion sur ce sujet, puis la conversation peut évoluer librement.</span>
             </label>
           )}
           <button type="button" className="btn primary" style={{ marginTop: 12 }} onClick={startConversation}>
@@ -379,7 +466,7 @@ export default function ConversationPage() {
               <label className="check small" style={{ padding: 0 }}>
                 <input type="checkbox" checked={autoPlay} onChange={(e) => setAutoPlay(e.target.checked)} /> Lecture audio auto
               </label>
-              <button type="button" className="btn sm" onClick={() => setConv(null)}>
+              <button type="button" className="btn sm" onClick={closeConversation}>
                 Nouvelle conversation
               </button>
             </div>
@@ -387,6 +474,7 @@ export default function ConversationPage() {
           <div className="chat" aria-live="polite">
             {conv.messages.map((m, i) => (
               <div key={i} className={`msg ${m.role}`}>
+                {m.role === 'teacher' && m.corrections?.length ? <Corrections items={m.corrections} better={m.betterVersion} /> : null}
                 {m.role === 'teacher' ? (
                   <div className="row" style={{ gap: 8, flexWrap: 'nowrap', alignItems: 'flex-start' }}>
                     <span style={{ flex: 1 }}>{m.text}</span>
@@ -401,16 +489,30 @@ export default function ConversationPage() {
                     Aide en français
                   </button>
                 )}
-                {m.corrections?.map((c, j) => (
-                  <div key={j} className={`correction ${c.kind}`}>
-                    <strong>{c.kind === 'error' ? 'Erreur' : 'Suggestion'}</strong> : « {c.original} » → « {c.corrected} »<div className="small">{c.explanationFr}</div>
+                {m.role !== 'teacher' &&
+                  m.corrections?.map((c, j) => (
+                    <div key={j} className={`correction ${c.kind}`}>
+                      <strong>{c.kind === 'error' ? 'Erreur' : 'Suggestion'}</strong> : « {c.original} » → « {c.corrected} »<div className="small">{c.explanationFr}</div>
+                    </div>
+                  ))}
+                {m.role === 'teacher' && !m.corrections?.length && m.betterVersion && (
+                  <div className="small" style={{ marginTop: 6 }}>
+                    💡 Version plus naturelle de votre phrase : <em>{m.betterVersion}</em>
                   </div>
-                ))}
-                {m.betterVersion && <div className="small" style={{ marginTop: 6 }}>💡 {m.role === 'teacher' ? 'Version plus naturelle de votre phrase : ' : ''}<em>{m.betterVersion}</em></div>}
+                )}
+                {m.role !== 'teacher' && m.betterVersion && (
+                  <div className="small" style={{ marginTop: 6 }}>
+                    💡 <em>{m.betterVersion}</em>
+                  </div>
+                )}
                 {m.tipFr && <div className="tip">{m.tipFr}</div>}
               </div>
             ))}
-            {busy && <div className="msg teacher muted">Léon réfléchit…</div>}
+            {busy && (
+              <div className="msg teacher muted" role="status">
+                Léon réfléchit…
+              </div>
+            )}
             <div ref={endRef} />
           </div>
 
@@ -431,7 +533,20 @@ export default function ConversationPage() {
                   )}
                 </div>
               )}
-              {error && <div className="notice bad small" style={{ marginBottom: 8 }} role="alert">{error}</div>}
+              {error && (
+                <div className="notice bad small" style={{ marginBottom: 8 }} role="alert">
+                  {error}
+                  {failed && conv.source === 'ai' && awaitingTeacher(conv.messages) && (
+                    <div className="row" style={{ marginTop: 8 }}>
+                      <button type="button" className="btn sm primary" onClick={() => void requestReply(conv)} disabled={busy}>
+                        ↻ Réessayer
+                      </button>
+                      <span className="tiny muted">Votre message est conservé, il ne sera pas envoyé deux fois.</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              {conv.source === 'ai' && <Observation messages={conv.messages} />}
               {micPhase === 'listening' && !text && <div className="small muted" aria-live="polite" style={{ marginBottom: 6 }}>🔴 Je vous écoute… parlez en anglais.</div>}
               {!stt.ok && conv && <div className="tiny muted" style={{ marginBottom: 6 }}>🎙️ Dictée vocale indisponible : {stt.reason}</div>}
               <div className="row" style={{ flexWrap: 'nowrap', alignItems: 'flex-end' }}>
@@ -482,7 +597,7 @@ export default function ConversationPage() {
               <button type="button" className="btn primary" onClick={startConversation}>
                 Recommencer ce scénario
               </button>
-              <button type="button" className="btn" onClick={() => setConv(null)}>
+              <button type="button" className="btn" onClick={closeConversation}>
                 Choisir un autre scénario
               </button>
             </div>
@@ -517,6 +632,39 @@ export default function ConversationPage() {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Corrections du professeur IA, affichées avant sa réponse (qui poursuit toujours la conversation). */
+function Corrections({ items, better }: { items: NonNullable<ConversationMessage['corrections']>; better?: string }) {
+  const errors = items.filter((c) => c.kind === 'error');
+  return (
+    <div className="conv-correction">
+      <div className="small" style={{ fontWeight: 600 }}>{errors.length ? '✏️ Petite correction' : '✨ Pour être plus naturel'}</div>
+      {items.map((c, j) => (
+        <div key={j} className="small" style={{ marginTop: 4 }}>
+          « {c.original} » → <strong>« {c.corrected} »</strong>
+          {c.explanationFr && <div className="muted">Pourquoi ? {c.explanationFr}</div>}
+        </div>
+      ))}
+      {better && (
+        <div className="small" style={{ marginTop: 6 }}>
+          Tu peux dire : <em>{better}</em>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Indication de niveau observée pendant la conversation (pédagogique, jamais officielle). */
+function Observation({ messages }: { messages: ConversationMessage[] }) {
+  const o = latestObservation(messages);
+  if (!o) return null;
+  return (
+    <div className="tiny muted" style={{ marginBottom: 6 }}>
+      📊 Observation de Léon (indicative, pas une évaluation officielle){o.levelHint ? ` : niveau proche de ${o.levelHint}` : ''}
+      {o.focusFr ? ` · À travailler : ${o.focusFr}` : ''}
     </div>
   );
 }

@@ -148,7 +148,7 @@ describe('cœur du professeur IA (serveur)', () => {
     expect(p).toContain('B1');
     expect(p).toContain('get by');
     expect(p).toContain('JSON');
-    expect(p).toMatch(/Never claim to evaluate pronunciation/);
+    expect(p).toMatch(/never claim to evaluate pronunciation/i);
   });
 
   it('analyse la réponse du modèle de façon tolérante', () => {

@@ -265,6 +265,11 @@ export function recordConversationTurn(state: LearnerState, now: Date, usedAi: b
   return s;
 }
 
+/** Appel au professeur IA sans réplique de l'apprenant (ouverture de la conversation) : compte pour le quota du jour. */
+export function recordAiCall(state: LearnerState, now: Date): LearnerState {
+  return updateDaily(state, now, { aiCalls: 1 });
+}
+
 /** Signal de maîtrise d'une notion hors exercice (ex. erreur repérée en conversation). */
 export function recordConceptSignal(state: LearnerState, concept: string, correct: boolean, now: Date): LearnerState {
   const at = now.toISOString();

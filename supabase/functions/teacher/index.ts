@@ -23,11 +23,7 @@ Deno.serve(async (req) => {
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError || !userData.user) return json(401, { error: 'Connectez-vous pour utiliser le professeur IA.' });
 
-  const limit = Number(Deno.env.get('AI_DAILY_LIMIT') ?? '50');
-  const { data: allowed, error: quotaError } = await supabase.rpc('consume_ai_quota', { daily_limit: limit });
-  if (quotaError) return json(500, { error: 'Erreur de quota.' });
-  if (!allowed) return json(429, { error: `Limite quotidienne de ${limit} échanges atteinte. Le partenaire local reste disponible.` });
-
+  // Validation AVANT de consommer le quota : une requête invalide ne coûte rien.
   let body: unknown;
   try {
     body = await req.json();
@@ -36,11 +32,24 @@ Deno.serve(async (req) => {
   }
   const parsed = validateTeacherRequest(body);
   if (!parsed.ok) return json(400, { error: parsed.error });
+
+  const limit = Number(Deno.env.get('AI_DAILY_LIMIT') ?? '50');
+  const { data: allowed, error: quotaError } = await supabase.rpc('consume_ai_quota', { daily_limit: limit });
+  if (quotaError) {
+    console.error(JSON.stringify({ event: 'teacher_quota_error', code: quotaError.code }));
+    return json(500, { error: 'Erreur de quota. Réessayez dans un instant.' });
+  }
+  if (!allowed) return json(429, { error: `Limite quotidienne de ${limit} échanges atteinte. Le partenaire local reste disponible.` });
+
+  const started = Date.now();
   try {
     const reply = await callTeacher({ baseUrl: baseUrl!, apiKey: Deno.env.get('AI_API_KEY') ?? undefined, model: model! }, parsed.value);
+    console.log(JSON.stringify({ event: 'teacher_ok', mode: parsed.value.mode, ms: Date.now() - started, turns: parsed.value.messages.length }));
     return json(200, reply);
   } catch (e) {
+    // Journal technique uniquement : jamais le contenu des messages ni de clé.
+    console.error(JSON.stringify({ event: 'teacher_error', code: e instanceof TeacherError ? e.code : 'internal', status: e instanceof TeacherError ? e.status : 500, ms: Date.now() - started }));
     if (e instanceof TeacherError) return json(e.status, { error: e.message });
-    return json(500, { error: 'Erreur interne.' });
+    return json(500, { error: 'Erreur interne du professeur IA. Réessayez.' });
   }
 });

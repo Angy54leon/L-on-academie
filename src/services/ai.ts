@@ -55,19 +55,66 @@ export async function checkAi(force = false): Promise<AiStatus> {
   return status;
 }
 
-export async function askTeacher(req: TeacherRequest): Promise<TeacherResponse> {
+/** Erreur du professeur IA, avec un message en français et l'indication qu'un nouvel essai a du sens. */
+export class AiError extends Error {
+  constructor(
+    message: string,
+    public retryable: boolean,
+    public status = 0,
+  ) {
+    super(message);
+  }
+}
+
+export interface AskOptions {
+  /** Annulation (changement de page, nouvelle conversation). */
+  signal?: AbortSignal;
+  /** Délai maximal côté navigateur (ms) : l'interface ne reste jamais bloquée. */
+  timeoutMs?: number;
+}
+
+function isTeacherResponse(body: unknown): body is TeacherResponse {
+  return !!body && typeof body === 'object' && typeof (body as TeacherResponse).reply === 'string' && !!(body as TeacherResponse).reply.trim();
+}
+
+export async function askTeacher(req: TeacherRequest, opts: AskOptions = {}): Promise<TeacherResponse> {
   const endpoint = aiEndpoint();
-  if (!endpoint) throw new Error('Professeur IA non configuré.');
-  const res = await fetch(endpoint, { method: 'POST', headers: await authHeaders(), body: JSON.stringify(req) });
-  let body: unknown = null;
+  if (!endpoint) throw new AiError('Professeur IA non configuré sur cette installation.', false);
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new AiError('Vous êtes hors ligne. Votre message est conservé : réessayez dès le retour de la connexion.', true);
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, opts.timeoutMs ?? 45000);
+  const onAbort = () => controller.abort();
+  opts.signal?.addEventListener('abort', onAbort);
   try {
-    body = await res.json();
-  } catch {
-    /* rien */
+    let res: Response;
+    try {
+      res = await fetch(endpoint, { method: 'POST', headers: await authHeaders(), body: JSON.stringify(req), signal: controller.signal });
+    } catch {
+      if (opts.signal?.aborted) throw new AiError('Demande annulée.', false);
+      if (timedOut) throw new AiError('Le professeur IA met trop de temps à répondre. Votre message est conservé : réessayez.', true);
+      throw new AiError('Connexion impossible avec le professeur IA (réseau). Votre message est conservé : réessayez.', true);
+    }
+    let body: unknown = null;
+    try {
+      body = await res.json();
+    } catch {
+      /* corps vide ou non JSON */
+    }
+    if (!res.ok) {
+      const serverMsg = body && typeof body === 'object' && 'error' in body ? String((body as { error: unknown }).error) : '';
+      if (res.status === 401) throw new AiError(serverMsg || 'Connectez-vous pour utiliser le professeur IA.', false, 401);
+      if (res.status === 429) throw new AiError(serverMsg || 'Limite d’échanges atteinte. Réessayez plus tard ou passez au partenaire local.', false, 429);
+      if (res.status === 400) throw new AiError(serverMsg || 'Message refusé par le serveur.', false, 400);
+      throw new AiError(serverMsg || `Le professeur IA est momentanément indisponible (erreur ${res.status}). Réessayez.`, true, res.status);
+    }
+    if (!isTeacherResponse(body)) throw new AiError('Le professeur IA a renvoyé une réponse vide. Réessayez.', true, res.status);
+    return body;
+  } finally {
+    clearTimeout(timer);
+    opts.signal?.removeEventListener('abort', onAbort);
   }
-  if (!res.ok) {
-    const msg = body && typeof body === 'object' && 'error' in body ? String((body as { error: unknown }).error) : `Erreur ${res.status}`;
-    throw new Error(msg);
-  }
-  return body as TeacherResponse;
 }

@@ -92,3 +92,16 @@ export function usesWord(text: string, en: string): boolean {
   const n = ` ${normalizeAnswer(text)} `;
   return forms.some((f) => n.includes(` ${[f, ...rest].join(' ')} `));
 }
+
+/**
+ * Le partenaire local ne reste jamais muet : quand la réponse doit être retravaillée, il relance
+ * la question avec bienveillance (au lieu d'un simple message d'aide gris).
+ */
+export function retryPrompt(step: ScenarioStep, fb: LocalFeedback): { text: string; fr: string } {
+  if (fb.french) return { text: `Could you try to say that in English? 😊 ${step.ai}`, fr: `Tu peux essayer de le dire en anglais ? 😊 ${step.fr}` };
+  const errors = fb.issues.some((i) => i.kind === 'error');
+  if (fb.words < (step.minWords ?? 3)) return { text: `Tell me a little more! ${step.ai}`, fr: `Dis-m’en un peu plus ! ${step.fr}` };
+  if (!fb.onTopic) return { text: `Hmm, I’m not sure that answers my question. ${step.ai}`, fr: `Hmm, je ne suis pas sûr que ça réponde à ma question. ${step.fr}` };
+  if (errors) return { text: 'I understand you! Can you say it again with the correction above?', fr: 'Je te comprends ! Tu peux le redire avec la correction ci-dessus ?' };
+  return { text: step.ai, fr: step.fr };
+}

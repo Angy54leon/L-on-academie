@@ -1801,3 +1801,12 @@ button.save-pill[data-save-status='pending'] {
   max-height: 260px;
   overflow: auto;
 }
+
+/* Corrections du professeur IA dans la conversation */
+.conv-correction {
+  border-left: 3px solid var(--warn);
+  background: var(--warn-soft);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}

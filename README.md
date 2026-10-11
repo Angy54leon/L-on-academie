@@ -163,7 +163,11 @@ Le navigateur n’a **jamais** accès à la clé : il appelle un petit serveur (
 
 ### En ligne (production)
 
-Le professeur IA en ligne passe par la fonction Supabase `teacher` (réservée aux utilisateurs connectés, avec quota quotidien par utilisateur). Suivez d’abord le §6, puis :
+Le professeur IA en ligne passe par la fonction Supabase `teacher` (réservée aux utilisateurs connectés, avec quota quotidien par utilisateur). Suivez d’abord le §6.
+
+**Sans ligne de commande (depuis un téléphone)** : la fonction `teacher` est déclarée dans `supabase/config.toml` ; si l’intégration GitHub de Supabase est activée (« Deploy to production »), elle est déployée automatiquement. Il reste à saisir les secrets dans le tableau de bord Supabase : **Edge Functions → Secrets** (ou Project Settings → Edge Functions) → ajoutez `AI_BASE_URL`, `AI_MODEL`, `AI_API_KEY` (et facultativement `AI_DAILY_LIMIT`). Les secrets restent côté serveur : ne les mettez jamais dans Vercel ni dans le code.
+
+**Avec la CLI** :
 
 ```bash
 npx supabase secrets set AI_BASE_URL=https://api.groq.com/openai/v1 AI_MODEL=nom-du-modele AI_API_KEY=votre-cle AI_DAILY_LIMIT=50
@@ -171,6 +175,16 @@ npx supabase functions deploy teacher
 ```
 
 Optionnel : `npx supabase secrets set ALLOWED_ORIGIN=https://votre-site.exemple` pour n’autoriser que votre site.
+
+### Comment se déroule une conversation avec le professeur IA
+
+- **Léon lance la discussion** sur le sujet choisi (ou un sujet « surprise »), puis réagit à ce que dit l’apprenant, rebondit sur ses détails et pose **une** question de suivi à la fois. Il peut changer de sujet quand la discussion s’essouffle et se souvient du contexte (les 14 derniers messages, plus un résumé des réponses plus anciennes).
+- **Niveau** : le niveau de la dernière évaluation passée sert de point de départ ; Léon simplifie ou enrichit selon les réponses. Une **observation de niveau indicative** (jamais officielle) s’affiche au fil de la conversation.
+- **Corrections** : seulement les erreurs importantes ou récurrentes du dernier message (2 au maximum), avec une explication courte en français et une version correcte ; rien n’est inventé quand la phrase est juste ; la réponse poursuit toujours la conversation.
+- **Fiabilité** : délai maximal (45 s côté navigateur, 30 s côté serveur), nouvelle tentative automatique en cas d’erreur temporaire du fournisseur, repli si le modèle n’accepte pas le format JSON, message d’erreur clair et bouton **Réessayer** qui ne duplique jamais le message de l’apprenant.
+- **Sécurité** : les consignes du professeur sont construites côté serveur ; les messages de l’apprenant ne peuvent pas les remplacer ; la clé reste un secret serveur. Les journaux techniques (codes d’erreur, durées) ne contiennent jamais le contenu des conversations.
+
+Sans professeur IA configuré, la salle de conversation utilise le **partenaire local** (scénarios préparés et correcteur à règles, clairement présenté comme n’étant pas une IA). Il relance désormais toujours la discussion, mais il ne *comprend* pas les réponses : une conversation vraiment naturelle nécessite le professeur IA.
 
 ---
 
@@ -331,6 +345,7 @@ Les tests vérifient notamment :
 - **l’apprentissage** : répétition espacée (jamais « maîtrisé » après une seule réponse), enregistrement des réponses, déblocage, remédiation, séries, adaptation, évaluations, conseil d’extension, badges, défis, notifications, validation des données ;
 - **la restauration à la connexion** : la base en ligne prime, jamais de remplacement par une copie vide, envoi des modifications non sauvegardées, fusion quand les deux versions ont changé, copie d’un autre compte ignorée, transfert des données sans compte, choix demandé quand les deux ont une progression ; cœur du professeur IA (validation, prompt côté serveur, limitation) ;
 - **les fonctions vocales** (moteur de reconnaissance simulé) : détection iPad/iPhone, Android, navigateurs intégrés, Firefox, page non sécurisée ; comportement de Safari sans résultat « final », résultats répétés de Chrome Android, micro refusé, micro qui ne s’ouvre jamais, fin sans parole, arrêt sans événement de fin, double lancement, annulation ;
+- **le mode conversation** (fournisseur d’IA simulé) : ouverture par Léon, consignes serveur (réaction au contenu, question de suivi, mémoire, corrections jamais inventées, niveau), analyse tolérante des réponses (JSON tronqué, réponse vide refusée), repli sans mode JSON, nouvelle tentative, quota épuisé, clé refusée, délai dépassé, réseau coupé, historique et mémoire envoyés au modèle ;
 - **la sécurité de la base Supabase** dans une vraie base Postgres embarquée (PGlite), avec les deux migrations : isolation des données, contrôle de concurrence, refus de remplacer une progression par du vide (sauf remise à zéro volontaire), refus sans connexion, groupes réservés aux membres, statistiques masquées tant qu’elles ne sont pas partagées, quota IA, suppression des données.
 
 Des tests de bout en bout dans un navigateur (Chromium/Playwright) ont aussi été réalisés pendant le développement ; ils ne font pas partie de `npm test` :

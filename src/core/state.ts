@@ -202,6 +202,9 @@ const convMessageSchema = z.object({
     .optional(),
   betterVersion: z.string().optional(),
   tipFr: z.string().optional(),
+  /** Indication de niveau observée par le professeur IA (pédagogique, non officielle). */
+  levelHint: z.string().optional(),
+  focusFr: z.string().optional(),
 });
 export type ConversationMessage = z.infer<typeof convMessageSchema>;
 
