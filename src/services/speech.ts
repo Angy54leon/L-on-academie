@@ -71,7 +71,8 @@ export function detectSpeechEnvironment(
     android,
     inApp,
     browser,
-    ttsApi: !!w && 'speechSynthesis' in w && 'SpeechSynthesisUtterance' in w,
+    // On vérifie que l'objet existe vraiment (certains navigateurs déclarent la propriété sans la fournir).
+    ttsApi: !!w && !!(w as { speechSynthesis?: unknown }).speechSynthesis && typeof (w as { SpeechSynthesisUtterance?: unknown }).SpeechSynthesisUtterance === 'function',
     sttApi: !!w && !!(w.SpeechRecognition || w.webkitSpeechRecognition),
     recorderApi: !!w && 'MediaRecorder' in w && typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia,
   };
@@ -103,7 +104,20 @@ export function sttAvailability(env: SpeechEnvironment = detectSpeechEnvironment
 }
 
 export function ttsSupported(): boolean {
-  return typeof window !== 'undefined' && 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
+  try {
+    return typeof window !== 'undefined' && !!window.speechSynthesis && typeof window.SpeechSynthesisUtterance === 'function' && typeof window.speechSynthesis.speak === 'function';
+  } catch {
+    return false;
+  }
+}
+
+/** Liste des voix sans jamais lever d'erreur (certains navigateurs mobiles échouent ici). */
+function safeVoices(): SpeechSynthesisVoice[] {
+  try {
+    return window.speechSynthesis.getVoices?.() ?? [];
+  } catch {
+    return [];
+  }
 }
 
 /** La reconnaissance vocale est-elle utilisable ici (API présente et page sécurisée) ? */
@@ -148,7 +162,7 @@ export function loadVoices(): Promise<VoiceInfo[]> {
   if (!ttsSupported()) return Promise.resolve([]);
   const map = (vs: SpeechSynthesisVoice[]) =>
     vs.filter((v) => v.lang.toLowerCase().replace('_', '-').startsWith('en')).map((v) => ({ uri: v.voiceURI, name: v.name, lang: v.lang.replace('_', '-'), local: v.localService }));
-  const now = window.speechSynthesis.getVoices();
+  const now = safeVoices();
   if (now.length) {
     voicesCache = now;
     return Promise.resolve(map(now));
@@ -158,16 +172,20 @@ export function loadVoices(): Promise<VoiceInfo[]> {
     const done = () => {
       if (settled) return;
       settled = true;
-      voicesCache = window.speechSynthesis.getVoices();
+      voicesCache = safeVoices();
       resolve(map(voicesCache));
     };
-    window.speechSynthesis.addEventListener?.('voiceschanged', done, { once: true });
+    try {
+      window.speechSynthesis.addEventListener?.('voiceschanged', done, { once: true });
+    } catch {
+      /* rien : le délai ci-dessous suffit */
+    }
     setTimeout(done, 1500);
   });
 }
 
 function pickVoice(accent: string, uri?: string): SpeechSynthesisVoice | undefined {
-  const voices = voicesCache.length ? voicesCache : window.speechSynthesis.getVoices();
+  const voices = voicesCache.length ? voicesCache : safeVoices();
   if (uri) {
     // La voix choisie sur un autre appareil (réglages synchronisés) n'existe pas forcément ici.
     const v = voices.find((x) => x.voiceURI === uri);
@@ -193,6 +211,16 @@ let currentFinish: (() => void) | null = null;
 
 export function speak(text: string, opts: SpeakOptions = {}): boolean {
   if (!ttsSupported()) return false;
+  try {
+    return speakUnsafe(text, opts);
+  } catch {
+    // La lecture à voix haute ne doit jamais casser la page.
+    opts.onEnd?.();
+    return false;
+  }
+}
+
+function speakUnsafe(text: string, opts: SpeakOptions): boolean {
   const synth = window.speechSynthesis;
   const busy = synth.speaking || synth.pending;
   if (busy) {
@@ -233,7 +261,11 @@ export function speak(text: string, opts: SpeakOptions = {}): boolean {
 export function stopSpeaking(): void {
   if (!ttsSupported()) return;
   currentFinish?.();
-  window.speechSynthesis.cancel();
+  try {
+    window.speechSynthesis.cancel();
+  } catch {
+    /* rien */
+  }
 }
 
 let unlockInstalled = false;

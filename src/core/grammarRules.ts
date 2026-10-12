@@ -110,7 +110,7 @@ const RULES: Rule[] = [
     id: 'doesnt-s',
     kind: 'error',
     concept: 'negation',
-    re: /\b(doesn't|does not|didn't|did not|don't|do not)\s+(?!(?:always|sometimes|perhaps|as|is|was|us|this|thus|yes|plus|less|unless|across|its|his|hers|ours|yours|theirs|series|news|bus|gas|focus|bonus|virus|status|campus)\b)(\w+?(?:es|s))\b(?<!ss)/gi,
+    re: /\b(doesn't|does not|didn't|did not|don't|do not)\s+(?!(?:always|sometimes|perhaps|as|is|was|us|this|thus|yes|plus|less|unless|across|its|his|hers|ours|yours|theirs|series|news|bus|gas|focus|bonus|virus|status|campus)\b)(\w*[^\Ws]s)\b/gi, // (sans « lookbehind », non pris en charge avant Safari 16.4)
     fix: (m) => `${m[1]} ${baseFromS(m[2])}`,
     explanation: 'Après do/does/did (et leur négation), le verbe reste à la forme de base, sans -s : « he doesn’t work ».',
   },

@@ -135,6 +135,11 @@ export default defineConfig(({ mode }) => {
   return {
     base: './',
     plugins: [react(), devTeacherApi(env), precacheManifest()],
+    build: {
+      // Compatibilité élargie (tablettes et téléphones plus anciens) : la syntaxe récente est convertie.
+      // Safari 14+ (iPad/iPhone sous iOS 14), Chrome 87+, Firefox 78+, Edge 88+, Samsung Internet récent.
+      target: ['es2020', 'safari14', 'chrome87', 'firefox78', 'edge88'],
+    },
     test: {
       environment: 'node',
       include: ['tests/**/*.test.ts'],

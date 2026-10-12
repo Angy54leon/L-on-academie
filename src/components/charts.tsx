@@ -11,6 +11,11 @@ function useWidth(fallback = 640) {
     if (!el) return;
     const update = () => setW(Math.max(280, Math.round(el.clientWidth)));
     update();
+    if (typeof ResizeObserver === 'undefined') {
+      // Navigateurs anciens : on suit simplement le redimensionnement de la fenêtre.
+      window.addEventListener('resize', update);
+      return () => window.removeEventListener('resize', update);
+    }
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();

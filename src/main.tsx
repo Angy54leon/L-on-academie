@@ -1,17 +1,22 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { PageErrorBoundary } from './components/PageErrorBoundary';
+import { installChunkRecovery } from './services/chunkRecovery';
 import { initSession } from './services/session';
 import { loadVoices, unlockSpeechOnFirstGesture } from './services/speech';
 import './styles/global.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <PageErrorBoundary fullScreen>
+      <App />
+    </PageErrorBoundary>
   </StrictMode>,
 );
 
 // Services facultatifs : sans configuration, ils ne font rien.
+installChunkRecovery();
 void initSession();
 void loadVoices();
 unlockSpeechOnFirstGesture();
