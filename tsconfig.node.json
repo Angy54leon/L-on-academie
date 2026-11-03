@@ -16,5 +16,5 @@
     "noUnusedParameters": true,
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "supabase/functions/_shared/teacher-core.ts"]
+  "include": ["vite.config.ts", "supabase/functions/_shared/teacher-core.ts", "src/services/supabaseHealth.ts"]
 }

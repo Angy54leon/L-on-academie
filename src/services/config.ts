@@ -4,8 +4,13 @@
 
 const env = import.meta.env;
 
+/** Adresse du projet sans barre finale ni suffixe copié par erreur (/rest/v1, /auth/v1). */
+function normalizeSupabaseUrl(raw: string): string {
+  return raw.trim().replace(/\/+$/, '').replace(/\/(rest|auth|storage|functions)\/v1$/i, '');
+}
+
 export const config = {
-  supabaseUrl: (env.VITE_SUPABASE_URL as string | undefined)?.trim() || '',
+  supabaseUrl: normalizeSupabaseUrl((env.VITE_SUPABASE_URL as string | undefined) ?? ''),
   supabaseAnonKey: (env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim() || '',
   /** Point d'accès du professeur IA. Par défaut : /api/teacher en développement, ou la fonction Supabase. */
   aiEndpoint: (env.VITE_AI_ENDPOINT as string | undefined)?.trim() || '',

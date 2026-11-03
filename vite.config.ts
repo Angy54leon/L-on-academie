@@ -10,6 +10,7 @@ import {
   TeacherError,
   validateTeacherRequest,
 } from './supabase/functions/_shared/teacher-core.ts';
+import { checkSupabaseUrl } from './src/services/supabaseHealth.ts';
 
 /**
  * Professeur IA en développement local : `/api/teacher`.
@@ -114,7 +115,15 @@ function resolvePublicSupabaseEnv(env: Record<string, string>) {
         'Elle ne doit jamais être envoyée au navigateur : utilisez la clé publique « publishable » (sb_publishable_…) ou « anon ».',
     );
   }
-  if (url) process.env.VITE_SUPABASE_URL = url;
+  if (url) {
+    const check = checkSupabaseUrl(url);
+    // Une adresse manifestement fausse produirait un site incapable de se connecter (« serveur injoignable ») :
+    // on arrête le déploiement avec un message clair plutôt que de publier un site cassé.
+    if (!check.ok) throw new Error(`LÉON ACADÉMIE : ${check.problem} (variable VITE_SUPABASE_URL, à corriger dans Vercel → Settings → Environment Variables).`);
+    process.env.VITE_SUPABASE_URL = check.normalized;
+  }
+  if (url && !key) console.warn('LÉON ACADÉMIE : VITE_SUPABASE_URL est défini mais pas VITE_SUPABASE_ANON_KEY : les comptes seront désactivés.');
+  if (key && !url) console.warn('LÉON ACADÉMIE : VITE_SUPABASE_ANON_KEY est défini mais pas VITE_SUPABASE_URL : les comptes seront désactivés.');
   if (key) process.env.VITE_SUPABASE_ANON_KEY = key;
 }
 

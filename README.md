@@ -237,6 +237,20 @@ En local : mettez-les dans `.env` (ignoré par Git). Sur Vercel : voir §7.
 
 Les noms créés automatiquement par l’intégration Supabase ↔ Vercel sont aussi acceptés : `NEXT_PUBLIC_SUPABASE_URL` et `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` ou `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Seules l’URL et la clé publique sont utilisées ; si une clé secrète est fournie par erreur, la compilation s’arrête avec un message explicite.
 
+### Dépannage : « le serveur de comptes est injoignable »
+
+Quand le navigateur ne peut pas joindre Supabase, il ne donne qu’une erreur générique (« Failed to fetch »). L’application cherche donc elle-même la vraie cause et l’affiche sur la page de connexion (rubrique **🩺 Problème de connexion ? Tester le serveur**, avec un rapport à copier, sans aucune clé) :
+
+| Diagnostic affiché | Cause | Que faire |
+| --- | --- | --- |
+| « …le projet Supabase est très probablement en pause » | Offre gratuite : projet mis en pause après 7 jours d’inactivité | supabase.com/dashboard → le projet → **Restore project** (gratuit), attendre quelques minutes |
+| « Le serveur de comptes (…) est introuvable » | `VITE_SUPABASE_URL` mal saisie, projet supprimé, ou réseau qui bloque supabase.co | Vérifier dans Vercel que l’adresse est exactement la « Project URL » du projet, puis **Redeploy** |
+| « …refuse la clé publique » | `VITE_SUPABASE_ANON_KEY` d’un autre projet, ou mal copiée | Recopier la clé « publishable » ou « anon » du même projet, puis **Redeploy** |
+| « …base de données … pas encore initialisée » | Fichiers SQL non exécutés | Exécuter les deux fichiers de `supabase/migrations` (voir ci-dessus) |
+| « Cet appareil est hors ligne » | Pas d’Internet sur l’appareil | Vérifier la connexion |
+
+À chaque déploiement, le build vérifie aussi l’adresse : une adresse du tableau de bord (`supabase.com/dashboard/…`) ou sans `https://` arrête le déploiement avec un message clair ; une adresse terminée par `/` ou `/rest/v1` est corrigée automatiquement.
+
 ### Limites à connaître
 
 - Les liens reçus par e-mail (confirmation, réinitialisation) doivent être ouverts **dans le navigateur où la demande a été faite** (sécurité PKCE). Ouverts ailleurs, l’adresse est quand même confirmée : il suffit de se connecter.

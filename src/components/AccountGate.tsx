@@ -34,6 +34,7 @@ export function AccountGate({ children }: { children: ReactNode }) {
     return (
       <Screen title="Impossible de récupérer votre progression">
         <p className="small">{account.restoreError}</p>
+        {account.restoreAction && <p className="small notice info" style={{ textAlign: 'left' }}>Pour le responsable du site : {account.restoreAction}</p>}
         <p className="small muted">Votre progression en ligne n’a pas été modifiée. Réessayez dans un instant.</p>
         <div className="row" style={{ justifyContent: 'center' }}>
           <button type="button" className="btn primary" onClick={retryRestore}>

@@ -13,7 +13,7 @@ import { isDayDone } from '../core/progress';
 import { getAccount, setAccount } from '../state/account';
 import { getScope, getState, switchScope } from '../state/store';
 import { fetchRemote, flushWithTimeout, onSaved, saveNow, setAutosaveToken, startAutosave, stopAutosave } from './autosave';
-import { frenchAuthError } from './auth';
+import { diagnoseServer, frenchAuthError } from './auth';
 import { supabaseConfigured } from './config';
 import { addBackup, getActiveScope, getFlag, loadScope, removeScope, saveScope, setFlag, setGuestModeChosen, type Scope } from './storage';
 import { getSupabase } from './supabase';
@@ -68,7 +68,7 @@ function install(user: User, state: LearnerState) {
   switchScope(userScope(user.id), { ...state, meta: { ...state.meta, ownerId: user.id } });
   setFlag('last-user', JSON.stringify(user));
   setGuestModeChosen(false);
-  setAccount({ status: 'signed-in', user, guestMode: false, notice: undefined, restoreError: undefined, choice: undefined });
+  setAccount({ status: 'signed-in', user, guestMode: false, notice: undefined, restoreError: undefined, restoreAction: undefined, choice: undefined });
 }
 
 function applyPlan(user: User, plan: ReturnType<typeof planRestore>) {
@@ -81,7 +81,7 @@ function applyPlan(user: User, plan: ReturnType<typeof planRestore>) {
 /** Récupère la progression en ligne du compte et l'installe (avant d'afficher le tableau de bord). */
 export async function restore(user: User): Promise<void> {
   const seq = ++restoreSeq;
-  setAccount({ status: 'restoring', user, notice: undefined, restoreError: undefined });
+  setAccount({ status: 'restoring', user, notice: undefined, restoreError: undefined, restoreAction: undefined });
   const sb = await getSupabase();
   if (!sb) return;
   const cacheLoad = loadScope(userScope(user.id));
@@ -96,9 +96,20 @@ export async function restore(user: User): Promise<void> {
       continueWithCache('Hors ligne : votre progression enregistrée sur cet appareil est affichée. Elle sera synchronisée au retour de la connexion.');
       return;
     }
-    const message = e instanceof Error && e.message !== 'timeout' ? frenchAuthError(e.message) : 'Le serveur ne répond pas.';
+    const raw = e instanceof Error ? e.message : String(e);
+    let message = raw !== 'timeout' ? frenchAuthError(raw) : 'Le serveur ne répond pas.';
+    let restoreAction: string | undefined;
+    // Serveur injoignable ou trop lent : on cherche la vraie cause (projet en pause, adresse, tables…).
+    if (raw === 'timeout' || /failed to fetch|networkerror|load failed|fetch failed/i.test(raw)) {
+      const report = await diagnoseServer().catch(() => null);
+      if (seq !== restoreSeq) return;
+      if (report && report.kind !== 'ok') {
+        message = report.message;
+        restoreAction = report.action;
+      }
+    }
     // Sans réponse du serveur, on ne montre JAMAIS une progression vide à la place de la vraie.
-    setAccount({ status: 'restore-error', restoreError: message, canUseCache: !!cache });
+    setAccount({ status: 'restore-error', restoreError: message, restoreAction, canUseCache: !!cache });
     return;
   }
   if (seq !== restoreSeq) return;
@@ -144,7 +155,7 @@ function toGuest(notice?: string) {
   stopAutosave();
   switchScope('guest', loadScope('guest').state);
   setGuestModeChosen(false);
-  setAccount({ status: 'signed-out', user: null, guestMode: false, notice, choice: undefined, restoreError: undefined });
+  setAccount({ status: 'signed-out', user: null, guestMode: false, notice, choice: undefined, restoreError: undefined, restoreAction: undefined });
 }
 
 /** Déconnexion volontaire : on envoie d'abord ce qui reste à sauvegarder. */

@@ -3,6 +3,7 @@ import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'reac
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
 import {
   deleteAccount,
+  diagnoseServer,
   deleteRemoteData,
   PASSWORD_MIN,
   requestPasswordReset,
@@ -16,6 +17,7 @@ import {
 import { checkRemote, saveNow, useSaveState } from '../services/autosave';
 import { afterAccountDeleted, chooseGuestMode, signOutFlow } from '../services/session';
 import { useAccount } from '../state/account';
+import type { HealthReport } from '../services/supabaseHealth';
 import { useLearner } from '../state/store';
 
 // ------------------------------------------------------------------ Éléments communs
@@ -110,6 +112,44 @@ function NotConfigured() {
   );
 }
 
+/**
+ * Diagnostic de la connexion au serveur de comptes : affiché quand le serveur n'a pas pu être joint,
+ * et disponible à la demande (« Tester la connexion au serveur »). Aucune clé n'est affichée.
+ */
+function ServerDiagnostic({ report: initial }: { report?: HealthReport }) {
+  const [report, setReport] = useState<HealthReport | undefined>(initial);
+  const [running, setRunning] = useState(false);
+  useEffect(() => setReport(initial), [initial]);
+  const run = async () => {
+    setRunning(true);
+    setReport(await diagnoseServer());
+    setRunning(false);
+  };
+  const text = report ? [report.message, report.action ? `À faire : ${report.action}` : '', ...report.details, typeof navigator !== 'undefined' ? navigator.userAgent : ''].filter(Boolean).join('\n') : '';
+  return (
+    <details className="small" style={{ marginTop: 12 }} open={!!initial}>
+      <summary style={{ cursor: 'pointer' }} className="muted">
+        🩺 Problème de connexion ? Tester le serveur
+      </summary>
+      <div style={{ marginTop: 8 }}>
+        {report && (
+          <div className={`notice small ${report.kind === 'ok' ? 'good' : 'warn'}`} role="status">
+            <strong>{report.message}</strong>
+            {report.action && <div style={{ marginTop: 6 }}>Pour le responsable du site : {report.action}</div>}
+            <pre className="diag-log">{report.details.join('\n')}</pre>
+            <button type="button" className="btn sm ghost" onClick={() => void navigator.clipboard?.writeText(text).catch(() => undefined)}>
+              📋 Copier le rapport
+            </button>
+          </div>
+        )}
+        <button type="button" className="btn sm" onClick={() => void run()} disabled={running} style={{ marginTop: 8 }}>
+          {running ? 'Test en cours…' : report ? '↻ Refaire le test' : 'Tester la connexion au serveur'}
+        </button>
+      </div>
+    </details>
+  );
+}
+
 /** Redirige vers la page demandée une fois la progression restaurée. */
 function useRedirectWhenSignedIn() {
   const account = useAccount();
@@ -130,6 +170,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{ email?: string | null; password?: string | null }>({});
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [diag, setDiag] = useState<HealthReport | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [unconfirmed, setUnconfirmed] = useState(false);
   const nav = useNavigate();
@@ -143,10 +184,12 @@ export function LoginPage() {
     if (errs.email || errs.password) return;
     setBusy(true);
     setMsg(null);
+    setDiag(undefined);
     const r = await signIn(email, password);
     setBusy(false);
     if (!r.ok) {
       setMsg({ ok: false, text: r.message });
+      setDiag(r.diagnostic);
       setUnconfirmed(/confirmée/.test(r.message));
     }
   };
@@ -189,6 +232,7 @@ export function LoginPage() {
           {busy ? 'Connexion…' : 'Se connecter'}
         </button>
       </form>
+      <ServerDiagnostic report={diag} />
       <hr className="sep" />
       <button
         type="button"
@@ -215,6 +259,7 @@ export function SignupPage() {
   const [errors, setErrors] = useState<{ email?: string | null; password?: string | null; confirm?: string | null }>({});
   const [msg, setMsg] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<string | null>(null);
+  const [signupDiag, setSignupDiag] = useState<HealthReport | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   useRedirectWhenSignedIn();
@@ -268,6 +313,7 @@ export function SignupPage() {
     setMsg(null);
     const r = await signUp(email, password);
     setBusy(false);
+    setSignupDiag(r.diagnostic);
     if (!r.ok) setMsg(r.message);
     else if (r.needsConfirmation) {
       setSentTo(email.trim());
@@ -301,6 +347,7 @@ export function SignupPage() {
           Si vous avez déjà commencé sans compte sur cet appareil, votre progression sera transférée dans votre nouveau compte.
         </p>
       </form>
+      <ServerDiagnostic report={signupDiag} />
     </AuthCard>
   );
 }
@@ -313,6 +360,7 @@ export function ForgotPasswordPage() {
   const [email, setEmail] = useState(params.get('email') ?? '');
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [forgotDiag, setForgotDiag] = useState<HealthReport | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   if (!account.configured) return <NotConfigured />;
   return (
@@ -327,6 +375,7 @@ export function ForgotPasswordPage() {
           setBusy(true);
           const r = await requestPasswordReset(email);
           setMsg({ ok: r.ok, text: r.message });
+          setForgotDiag(r.diagnostic);
           setBusy(false);
         }}
       >
@@ -340,6 +389,7 @@ export function ForgotPasswordPage() {
           {busy ? 'Envoi…' : 'Recevoir le lien'}
         </button>
       </form>
+      <ServerDiagnostic report={forgotDiag} />
     </AuthCard>
   );
 }

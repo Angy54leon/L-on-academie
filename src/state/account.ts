@@ -21,6 +21,8 @@ export interface AccountState {
   /** Message affiché sur l'écran de connexion (session expirée, lien invalide…). */
   notice?: string;
   restoreError?: string;
+  /** Ce que le responsable du site doit faire (diagnostic du serveur). */
+  restoreAction?: string;
   /** Résumé des deux progressions à départager (statut « choice »). */
   choice?: { accountDays: number; accountAnswers: number; deviceDays: number; deviceAnswers: number };
   /** La copie locale peut être utilisée si la restauration échoue. */
