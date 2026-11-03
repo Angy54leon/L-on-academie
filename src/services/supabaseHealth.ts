@@ -9,7 +9,7 @@
 //   - appareil réellement hors ligne, ou bloqueur / réseau filtrant.
 // On teste chaque hypothèse pour afficher la vraie cause et la marche à suivre, sans jamais exposer la clé.
 
-export type HealthKind = 'ok' | 'offline' | 'bad-url' | 'unreachable' | 'paused' | 'unavailable' | 'bad-key' | 'no-tables' | 'not-configured';
+export type HealthKind = 'ok' | 'offline' | 'bad-url' | 'unreachable' | 'blocked' | 'paused' | 'unavailable' | 'bad-key' | 'no-tables' | 'not-configured';
 
 export interface HealthReport {
   kind: HealthKind;
@@ -93,6 +93,9 @@ async function timed(fetchImpl: FetchLike, url: string, init: RequestInit, ms: n
   }
 }
 
+const NETWORK_ACTION =
+  'Essayez sur un autre réseau (4G au lieu du Wi-Fi, ou l’inverse) et sur un autre appareil. Sur iPhone/iPad, vérifiez : VPN ou bloqueur de publicités (Réglages › Général › VPN et gestion de l’appareil ; Réglages › Safari › Extensions / Bloqueurs de contenu), Relais privé iCloud (Réglages › votre nom › iCloud › Relais privé), Temps d’écran (Restrictions de contenu › Contenu web). Sur un réseau d’école ou d’entreprise, supabase.co peut être filtré.';
+
 const PAUSED_ACTION =
   'Ouvrez https://supabase.com/dashboard, choisissez le projet : s’il affiche « Paused » / « En pause », cliquez sur « Restore project » (gratuit) et attendez quelques minutes. Sur l’offre gratuite, un projet inutilisé pendant 7 jours est mis en pause automatiquement.';
 
@@ -109,21 +112,26 @@ export async function diagnoseSupabase(opts: DiagnoseOptions): Promise<HealthRep
   if (opts.online === false) return { kind: 'offline', message: 'Cet appareil est hors ligne. Reconnectez-vous à Internet puis réessayez.', details };
 
   const base = urlCheck.normalized;
-  const headers = { apikey: opts.key, Authorization: `Bearer ${opts.key}` };
+  // Comme le site : la clé dans « apikey » ; jamais une clé « sb_… » en jeton Bearer (recommandation Supabase).
+  const headers: Record<string, string> = /^sb_(publishable|secret)_/.test(opts.key) ? { apikey: opts.key } : { apikey: opts.key, Authorization: `Bearer ${opts.key}` };
+  const attemptFetch = async (init: RequestInit): Promise<{ res: Response | null; error: string }> => {
+    try {
+      return { res: await timed(fetchImpl, `${base}/auth/v1/health`, init, ms), error: '' };
+    } catch (e) {
+      return { res: null, error: e instanceof Error ? `${e.name}: ${e.message}` : String(e) };
+    }
+  };
 
-  // 1. Serveur d'authentification joignable (requête « CORS » normale, comme la connexion) ?
-  let health: Response | null = null;
-  let healthError = '';
-  try {
-    health = await timed(fetchImpl, `${base}/auth/v1/health`, { headers }, ms);
-  } catch (e) {
-    healthError = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-  }
-  if (health) details.push(`Test du serveur d’authentification : HTTP ${health.status}`);
+  // 1. Requête comme lors de la connexion (avec la clé, donc précédée d'une vérification CORS « preflight »).
+  const withKey = await attemptFetch({ headers });
+  const health = withKey.res;
+  details.push(`Test avec la clé (comme la connexion) : ${health ? `HTTP ${health.status}` : `échec (${withKey.error})`}`);
 
   if (!health) {
-    details.push(`Test du serveur d’authentification : échec (${healthError})`);
-    // 2. Le serveur répond-il sans en-têtes CORS (projet en pause / en cours de redémarrage) ?
+    // 2. Requête simple, sans en-tête particulier : le serveur renvoie-t-il une réponse lisible ?
+    const simple = await attemptFetch({});
+    details.push(`Test simple sans clé : ${simple.res ? `HTTP ${simple.res.status} (réponse lisible)` : `échec (${simple.error})`}`);
+    // 3. Le serveur répond-il, même sans autorisation CORS (réponse illisible pour le site) ?
     let opaque = false;
     try {
       await timed(fetchImpl, `${base}/auth/v1/health`, { mode: 'no-cors' }, ms);
@@ -131,12 +139,19 @@ export async function diagnoseSupabase(opts: DiagnoseOptions): Promise<HealthRep
     } catch {
       opaque = false;
     }
-    details.push(`Serveur joignable sans CORS : ${opaque ? 'oui' : 'non'}`);
+    details.push(`Serveur joignable (réponse illisible acceptée) : ${opaque ? 'oui' : 'non'}`);
+    if (simple.res)
+      return {
+        kind: 'blocked',
+        message: 'Le serveur de comptes répond, mais les requêtes de connexion sont bloquées en chemin : le problème vient très probablement du réseau ou de l’appareil (filtre, VPN, bloqueur, contrôle parental), pas du site.',
+        action: NETWORK_ACTION,
+        details,
+      };
     if (opaque)
       return {
-        kind: 'paused',
-        message: 'Le serveur de comptes répond, mais refuse les connexions depuis le site : le projet Supabase est très probablement en pause (ou en train de redémarrer).',
-        action: PAUSED_ACTION,
+        kind: 'blocked',
+        message: 'Le serveur de comptes répond, mais ses réponses n’arrivent pas lisibles jusqu’au site. Deux causes possibles : un réseau ou un appareil qui intercepte les requêtes (VPN, bloqueur, contrôle parental, réseau filtré), ou un projet Supabase en pause ou en redémarrage.',
+        action: `${NETWORK_ACTION} Si le problème se produit partout (autre appareil, autre réseau) : ${PAUSED_ACTION}`,
         details,
       };
     // 3. L'appareil a-t-il Internet ? (requête vers le site lui-même)

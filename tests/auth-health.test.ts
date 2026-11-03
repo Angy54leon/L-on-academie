@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { frenchAuthError, isNetworkAuthError } from '../src/services/auth';
 import { checkSupabaseUrl, describeKey, diagnoseSupabase } from '../src/services/supabaseHealth';
+import { withoutKeyAsBearer } from '../src/services/supabase';
 
 const URL_OK = 'https://acjklhkkufoxfckcalop.supabase.co';
 const KEY = 'sb_publishable_test_0123456789abcdef';
@@ -45,12 +46,37 @@ describe('adresse du projet Supabase (VITE_SUPABASE_URL)', () => {
 });
 
 describe('diagnostic quand la connexion échoue', () => {
-  it('projet en pause : le serveur répond sans CORS → message « en pause » + marche à suivre', async () => {
+  it('réponse illisible partout (sans CORS) : réseau qui intercepte OU projet en pause — les deux pistes, sans conclure à tort', async () => {
     const { fetchImpl } = net((_u, init) => (init?.mode === 'no-cors' ? Promise.resolve(new Response(null, { status: 200 })) : corsFail()));
     const r = await diagnoseSupabase({ url: URL_OK, key: KEY, fetchImpl, online: true, selfUrl: 'https://l-on-academie.vercel.app/' });
-    expect(r.kind).toBe('paused');
+    expect(r.kind).toBe('blocked');
+    expect(r.message).toMatch(/réseau ou un appareil/);
     expect(r.message).toMatch(/en pause/);
+    expect(r.action).toMatch(/4G/);
     expect(r.action).toMatch(/Restore project/);
+  });
+
+  it('requête simple lisible mais requête avec la clé bloquée : filtre réseau/appareil (pas le site)', async () => {
+    const { fetchImpl } = net((_u, init) => {
+      const h = new Headers(init?.headers);
+      if (h.has('apikey')) return corsFail();
+      return Promise.resolve(json(401, { message: 'No API key found in request' }));
+    });
+    const r = await diagnoseSupabase({ url: URL_OK, key: KEY, fetchImpl, online: true });
+    expect(r.kind).toBe('blocked');
+    expect(r.message).toMatch(/réseau ou de l’appareil/);
+    expect(r.details.join(' ')).toMatch(/Test simple sans clé : HTTP 401/);
+  });
+
+  it('jamais la clé « publishable » en jeton Bearer (recommandation Supabase)', async () => {
+    const seen: Headers[] = [];
+    const fetchImpl = (_u: string, init?: RequestInit) => {
+      seen.push(new Headers(init?.headers));
+      return Promise.resolve(json(200, {}));
+    };
+    await diagnoseSupabase({ url: URL_OK, key: KEY, fetchImpl, online: true });
+    expect(seen[0].get('apikey')).toBe(KEY);
+    expect(seen[0].get('Authorization')).toBeNull();
   });
 
   it('adresse introuvable (faute de frappe, projet supprimé, réseau filtrant) mais Internet OK', async () => {
@@ -123,5 +149,23 @@ describe('messages d’erreur de connexion', () => {
     expect(frenchAuthError('Invalid API key')).toMatch(/clé publique/);
     expect(frenchAuthError("Could not find the table 'public.learner_states' in the schema cache")).toMatch(/pas encore initialisée/);
     expect(frenchAuthError('Database error saving new user')).toMatch(/fichiers SQL/);
+  });
+});
+
+describe('envoi de la clé « publishable »', () => {
+  it('retire « Authorization: Bearer <clé> » mais garde le jeton d’un utilisateur connecté', async () => {
+    const sent: Headers[] = [];
+    const base = (async (_i: RequestInfo | URL, init?: RequestInit) => {
+      sent.push(new Headers(init?.headers));
+      return new Response('{}');
+    }) as typeof fetch;
+    const f = withoutKeyAsBearer(KEY, base);
+    await f('https://x/auth/v1/token', { headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } });
+    await f('https://x/rest/v1/t', { headers: { apikey: KEY, Authorization: 'Bearer user.jwt.token' } });
+    expect(sent[0].get('Authorization')).toBeNull();
+    expect(sent[0].get('apikey')).toBe(KEY);
+    expect(sent[1].get('Authorization')).toBe('Bearer user.jwt.token');
+    // Ancienne clé JWT « anon » : comportement inchangé.
+    expect(withoutKeyAsBearer('eyJhbGciOi.payload.sig', base)).toBe(base);
   });
 });

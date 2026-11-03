@@ -243,11 +243,14 @@ Quand le navigateur ne peut pas joindre Supabase, il ne donne qu’une erreur g�
 
 | Diagnostic affiché | Cause | Que faire |
 | --- | --- | --- |
-| « …le projet Supabase est très probablement en pause » | Offre gratuite : projet mis en pause après 7 jours d’inactivité | supabase.com/dashboard → le projet → **Restore project** (gratuit), attendre quelques minutes |
+| « …ses réponses n’arrivent pas lisibles jusqu’au site » | Soit un réseau ou un appareil qui intercepte les requêtes (VPN, bloqueur de publicités, contrôle parental, Relais privé iCloud, réseau d’école ou d’entreprise), soit un projet Supabase en pause (offre gratuite : après 7 jours d’inactivité) | Essayer en 4G / sur un autre appareil ; si cela échoue partout : supabase.com/dashboard → le projet → **Restore project** |
+| « …les requêtes de connexion sont bloquées en chemin » | Le serveur répond, mais un filtre sur le réseau ou l’appareil bloque les requêtes portant la clé | Même vérification réseau / appareil (4G, VPN, bloqueurs, Relais privé, Temps d’écran) |
 | « Le serveur de comptes (…) est introuvable » | `VITE_SUPABASE_URL` mal saisie, projet supprimé, ou réseau qui bloque supabase.co | Vérifier dans Vercel que l’adresse est exactement la « Project URL » du projet, puis **Redeploy** |
 | « …refuse la clé publique » | `VITE_SUPABASE_ANON_KEY` d’un autre projet, ou mal copiée | Recopier la clé « publishable » ou « anon » du même projet, puis **Redeploy** |
 | « …base de données … pas encore initialisée » | Fichiers SQL non exécutés | Exécuter les deux fichiers de `supabase/migrations` (voir ci-dessus) |
 | « Cet appareil est hors ligne » | Pas d’Internet sur l’appareil | Vérifier la connexion |
+
+Les nouvelles clés `sb_publishable_…` sont envoyées uniquement dans l’en-tête `apikey`, jamais comme jeton `Authorization: Bearer` (recommandation de Supabase pour ce format de clé).
 
 À chaque déploiement, le build vérifie aussi l’adresse : une adresse du tableau de bord (`supabase.com/dashboard/…`) ou sans `https://` arrête le déploiement avec un message clair ; une adresse terminée par `/` ou `/rest/v1` est corrigée automatiquement.
 
